@@ -1,0 +1,8 @@
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS is_email_verified BOOLEAN DEFAULT FALSE;
+
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS verification_status VARCHAR(50);
+
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS verified_company VARCHAR(255);

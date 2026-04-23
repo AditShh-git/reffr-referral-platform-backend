@@ -1,0 +1,163 @@
+spring:
+  application:
+    name: Reffr-Backend
+
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+
+  # ── Database ──────────────────────────────────────────────────────────
+  datasource:
+    url:      ${DB_URL:jdbc:postgresql://localhost:5432/referly_db}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      schema: public
+
+  # ── JPA ───────────────────────────────────────────────────────────────
+  jpa:
+    hibernate:
+      ddl-auto: validate          # Flyway owns the schema
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        default_schema: public
+        jdbc:
+          batch_size: 25
+        order_inserts: true
+        order_updates: true
+
+  # ── Flyway ────────────────────────────────────────────────────────────
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    validate-on-migrate: true
+    default-schema: public
+    schemas: public
+
+  # ── Redis ─────────────────────────────────────────────────────────────
+  data:
+    redis:
+      host:     ${REDIS_HOST:localhost}
+      port:     ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      repositories:
+        enabled: false
+      lettuce:
+        pool:
+          max-active: 20
+          max-idle: 10
+          min-idle: 2
+
+  # ── Cache ─────────────────────────────────────────────────────────────
+  cache:
+    type: redis
+    redis:
+      time-to-live: 600000      # 10 min default TTL
+
+  # ── OAuth2 — GitHub ───────────────────────────────────────────────────
+  security:
+    oauth2:
+      client:
+        registration:
+          github:
+            client-id:     ${GITHUB_CLIENT_ID}
+            client-secret: ${GITHUB_CLIENT_SECRET}
+            scope:
+              - read:user
+              - user:email
+        provider:
+          github:
+            authorization-uri: https://github.com/login/oauth/authorize
+            token-uri:         https://github.com/login/oauth/access_token
+            user-info-uri:     https://api.github.com/user
+            user-name-attribute: login
+
+  # ── File upload ───────────────────────────────────────────────────────
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 5MB
+      max-request-size: 10MB
+
+  # ── Async / Scheduling thread pools ──────────────────────────────────
+  task:
+    execution:
+      pool:
+        core-size: 4
+        max-size: 10
+        queue-capacity: 200
+      thread-name-prefix: async-
+    scheduling:
+      pool:
+        size: 2
+      thread-name-prefix: scheduled-
+
+    # ── Mail ──────────────────────────────────────────────────────────────
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${SMTP_USERNAME}
+    password: ${SMTP_PASSWORD}   # remove spaces
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+# ── JWT ───────────────────────────────────────────────────────────────
+
+jwt:
+  secret: ${JWT_SECRET}
+  access-token-expiry-ms: 86400000   # 24h in ms
+  refresh-token-expiry-ms: 604800000 # 7d in ms
+
+aws:
+  region: ${AWS_REGION:ap-south-1}
+
+#  s3:
+#    access-key: ${AWS_ACCESS_KEY:}  # matches @Value("${aws.s3.access-key}")
+#    secret-key: ${AWS_SECRET_KEY:}  # matches @Value("${aws.s3.secret-key}")
+#    bucket: ${AWS_S3_BUCKET:}   # matches @Value("${aws.s3.bucket}")
+
+# ── App ───────────────────────────────────────────────────────────────
+reffr:
+  frontend-url: ${FRONTEND_URL:http://localhost:3000}
+
+# ── Swagger ───────────────────────────────────────────────────────────
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    oauth2-redirect-url: http://localhost:8080/swagger-ui/oauth2-redirect.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  show-actuator: false
+
+# ── Actuator ─────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized
+
+# ── Logging ───────────────────────────────────────────────────────────
+logging:
+  level:
+    com.Reffr_Backend:           DEBUG
+    org.springframework.security: WARN
+    org.hibernate.SQL:            INFO
+    org.flywaydb:                 INFO
+

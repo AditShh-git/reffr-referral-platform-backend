@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <!-- ── Color support (Spring Boot) ─────────────────────────── -->
+    <conversionRule conversionWord="clr"
+                    class="org.springframework.boot.logging.logback.ColorConverter"/>
+    <conversionRule conversionWord="wex"
+                    class="org.springframework.boot.logging.logback.WhitespaceThrowableProxyConverter"/>
+
+    <!-- ── Console (FAST + CLEAN + COLOR) ─────────────────────── -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>
+                %clr(%d{HH:mm:ss}){faint}
+                %clr(%-5level){ERROR=red, WARN=yellow, INFO=green, DEBUG=blue}
+                %clr([%X{requestId:--}]){cyan}
+                %clr(%logger{25}){magenta}
+                %clr(:){faint}
+                %msg%n%wex
+            </pattern>
+        </encoder>
+    </appender>
+
+    <!-- ── File (PRODUCTION SAFE) ─────────────────────────────── -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/reffr.log</file>
+
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>logs/reffr.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>50MB</maxFileSize>
+            <maxHistory>14</maxHistory>
+            <totalSizeCap>2GB</totalSizeCap>
+        </rollingPolicy>
+
+        <encoder>
+            <pattern>
+                %d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{requestId:--}] [%X{method:--} %X{uri:--}] %logger{36} : %msg%n%ex
+            </pattern>
+        </encoder>
+    </appender>
+
+    <!-- ── Async Logging (HIGH PERFORMANCE) ───────────────────── -->
+    <appender name="ASYNC_CONSOLE" class="ch.qos.logback.classic.AsyncAppender">
+        <queueSize>512</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+        <appender-ref ref="CONSOLE"/>
+    </appender>
+
+    <appender name="ASYNC_FILE" class="ch.qos.logback.classic.AsyncAppender">
+        <queueSize>1024</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+        <appender-ref ref="FILE"/>
+    </appender>
+
+    <!-- ── Noise Reduction (IMPORTANT) ─────────────────────────── -->
+    <logger name="org.springframework" level="WARN"/>
+    <logger name="org.springframework.web" level="WARN"/>
+    <logger name="org.springframework.security" level="WARN"/>
+
+    <logger name="org.hibernate" level="WARN"/>
+    <logger name="org.hibernate.SQL" level="WARN"/>
+
+    <logger name="com.zaxxer.hikari" level="WARN"/>
+    <logger name="io.lettuce" level="WARN"/>
+    <logger name="org.springframework.data.redis" level="WARN"/>
+    <logger name="software.amazon.awssdk" level="WARN"/>
+
+    <!-- ── Your Application Logs ─────────────────────────────── -->
+    <logger name="com.reffr" level="INFO"/>
+
+    <!-- ── Root Logger ───────────────────────────────────────── -->
+    <root level="INFO">
+        <appender-ref ref="ASYNC_CONSOLE"/>
+        <appender-ref ref="ASYNC_FILE"/>
+    </root>
+
+</configuration>
