@@ -12,6 +12,9 @@ application.yml
 
 # Logs
 *.log
+logs/
+*.txt
+uploads/
 
 # OS files
 .DS_Store
