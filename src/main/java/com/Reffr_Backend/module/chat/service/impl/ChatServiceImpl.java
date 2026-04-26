@@ -101,12 +101,18 @@ public class ChatServiceImpl implements ChatService {
     @Transactional(readOnly = true)
     public CursorPagedResponse<ChatDto.ChatSummary> getMyChats(UUID userId, Instant lastMessageAt, Pageable pageable) {
         LocalDateTime cursor = lastMessageAt != null ? LocalDateTime.ofInstant(lastMessageAt, ZoneOffset.UTC) : null;
-        Page<Chat> chats = chatRepository.findByUserId(userId, cursor, pageable);
-        
+        Page<Chat> chats;
+
+        if (cursor == null) {
+            chats = chatRepository.findFirstPage(userId, pageable);
+        } else {
+            chats = chatRepository.findNextPage(userId, cursor, pageable);
+        }
+
         List<ChatDto.ChatSummary> dtoList = chats.stream()
                 .map(chat -> buildSummary(chat, userId))
                 .toList();
-                
+
         Instant nextCursor = null;
         if (!chats.isEmpty() && chats.hasNext()) {
             LocalDateTime next = chats.getContent().get(chats.getContent().size() - 1).getLastMessageAt();
@@ -124,9 +130,14 @@ public class ChatServiceImpl implements ChatService {
     public CursorPagedResponse<ChatDto.MessageResponse> getMessages(UUID chatId, UUID userId, Instant lastCreatedAt, Pageable pageable) {
 
         Chat chat = getChatForParticipant(chatId, userId);
-        LocalDateTime cursor = lastCreatedAt != null ? LocalDateTime.ofInstant(lastCreatedAt, ZoneOffset.UTC) : null;
 
-        Page<Message> messages = messageRepository.findByChatId(chat.getId(), cursor, pageable);
+        Page<Message> messages;
+
+        if (lastCreatedAt == null) {
+            messages = messageRepository.findFirstPage(chat.getId(), pageable);
+        } else {
+            messages = messageRepository.findNextPage(chat.getId(), lastCreatedAt, pageable);
+        }
         
         List<ChatDto.MessageResponse> dtoList = messages.stream()
                 .map(m -> ChatDto.MessageResponse.from(m, userId))
@@ -203,16 +214,15 @@ public class ChatServiceImpl implements ChatService {
 
     // ── MARK READ ─────────────────────────────────────────────────────
 
+    @Override
     @Transactional
     public void markAsRead(UUID chatId, UUID userId) {
+        List<UUID> messageIds = messageRepository.findUnreadMessageIds(chatId, userId);
+        if (messageIds.isEmpty()) return;
 
-        getChatForParticipant(chatId, userId);
-
-        int updated = messageRepository.markAllRead(chatId, userId, LocalDateTime.now());
-
-        if (updated > 0) {
-            log.debug("Marked {} messages read — chatId={} userId={}", updated, chatId, userId);
-        }
+        messageRepository.markAllRead(chatId, userId);
+        wsPublisher.publishStatusUpdate(chatId, messageIds, com.Reffr_Backend.module.chat.entity.MessageStatus.READ);
+        log.debug("Chat marked read — chatId={} userId={}", chatId, userId);
     }
 
     // ── UNREAD COUNT ──────────────────────────────────────────────────
@@ -223,9 +233,15 @@ public class ChatServiceImpl implements ChatService {
         return chatRepository.countUnreadMessages(userId);
     }
 
+    @Override
     @Transactional
     public void markDelivered(UUID chatId, UUID userId) {
-        messageRepository.markDelivered(chatId, userId);
+        List<UUID> messageIds = messageRepository.findUndeliveredMessageIds(chatId, userId);
+        if (messageIds.isEmpty()) return;
+
+        messageRepository.markAllDelivered(chatId, userId);
+        wsPublisher.publishStatusUpdate(chatId, messageIds, com.Reffr_Backend.module.chat.entity.MessageStatus.DELIVERED);
+        log.debug("Chat marked delivered — chatId={} userId={}", chatId, userId);
     }
 
     // ── WORKFLOW ACTIONS ─────────────────────────────────────────────────────

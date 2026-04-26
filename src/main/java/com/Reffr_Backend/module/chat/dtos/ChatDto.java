@@ -80,6 +80,7 @@ public final class ChatDto {
         private LocalDateTime       readAt;
         private LocalDateTime       createdAt;
         private boolean             isMine;
+        private com.Reffr_Backend.module.chat.entity.MessageStatus status;
 
         public static MessageResponse from(Message message, UUID currentUserId) {
             boolean isSystem = message.getMessageType() == MessageType.SYSTEM;
@@ -93,6 +94,7 @@ public final class ChatDto {
                     .readAt(message.getReadAt())
                     .createdAt(message.getCreatedAt())
                     .isMine(!isSystem && message.getSender().getId().equals(currentUserId))
+                    .status(message.getStatus())
                     .build();
         }
     }

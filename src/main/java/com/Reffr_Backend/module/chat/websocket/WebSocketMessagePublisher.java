@@ -29,20 +29,33 @@ public class WebSocketMessagePublisher {
         }
     }
 
-    public void publishTyping(UUID chatId, UUID userId) {
+    public void publishTyping(UUID chatId, UUID userId, boolean typing) {
         try {
             messagingTemplate.convertAndSend(
                     "/topic/chat/" + chatId + "/typing",
-                    TypingEvent.of(chatId, userId)
+                    com.Reffr_Backend.module.chat.dtos.ChatWsDto.TypingEvent.builder()
+                            .userId(userId)
+                            .typing(typing)
+                            .build()
             );
         } catch (Exception e) {
             log.warn("WS typing publish failed — chatId={}", chatId);
         }
     }
 
-    public record TypingEvent(UUID chatId, UUID userId) {
-        public static TypingEvent of(UUID chatId, UUID userId) {
-            return new TypingEvent(chatId, userId);
+    public void publishStatusUpdate(UUID chatId, java.util.List<UUID> messageIds, com.Reffr_Backend.module.chat.entity.MessageStatus status) {
+        try {
+            messagingTemplate.convertAndSend(
+                    "/topic/chat/" + chatId + "/status",
+                    com.Reffr_Backend.module.chat.dtos.ChatWsDto.MessageStatusUpdateEvent.builder()
+                            .chatId(chatId)
+                            .messageIds(messageIds)
+                            .status(status)
+                            .timestamp(java.time.Instant.now())
+                            .build()
+            );
+        } catch (Exception e) {
+            log.warn("WS status update failed — chatId={}", chatId);
         }
     }
 }

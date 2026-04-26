@@ -27,6 +27,7 @@ public class TypingIndicatorController {
     @MessageMapping("/chat/{chatId}/typing")
     public void typing(
             @DestinationVariable UUID chatId,
+            com.Reffr_Backend.module.chat.dtos.ChatWsDto.TypingRequest request,
             Principal principal) {
 
         UUID userId = UUID.fromString(principal.getName());
@@ -37,6 +38,6 @@ public class TypingIndicatorController {
 
         if (!chat.isParticipant(userId)) return;
 
-        publisher.publishTyping(chatId, userId);
+        publisher.publishTyping(chatId, userId, request.isTyping());
     }
 }

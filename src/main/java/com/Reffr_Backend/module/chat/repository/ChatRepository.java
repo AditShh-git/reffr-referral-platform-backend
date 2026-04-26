@@ -17,15 +17,38 @@ import java.time.LocalDateTime;
 public interface ChatRepository extends JpaRepository<Chat, UUID> {
 
     //  FIX: Use EntityGraph instead of JOIN FETCH
+//    @EntityGraph(attributePaths = {"seeker", "referrer", "referral"})
+//    @Query("""
+//    SELECT c FROM Chat c
+//    WHERE (c.seeker.id = :userId OR c.referrer.id = :userId)
+//      AND c.active = true
+//      AND (:lastMessageAt IS NULL OR c.lastMessageAt < :lastMessageAt)
+//    ORDER BY c.lastMessageAt DESC NULLS LAST, c.id DESC
+//    """)
+//    Page<Chat> findByUserId(@Param("userId") UUID userId, @Param("lastMessageAt") LocalDateTime lastMessageAt, Pageable pageable);
+
     @EntityGraph(attributePaths = {"seeker", "referrer", "referral"})
     @Query("""
-    SELECT c FROM Chat c
-    WHERE (c.seeker.id = :userId OR c.referrer.id = :userId)
-      AND c.active = true
-      AND (:lastMessageAt IS NULL OR c.lastMessageAt < :lastMessageAt)
-    ORDER BY c.lastMessageAt DESC NULLS LAST, c.id DESC
-    """)
-    Page<Chat> findByUserId(@Param("userId") UUID userId, @Param("lastMessageAt") LocalDateTime lastMessageAt, Pageable pageable);
+SELECT c FROM Chat c
+WHERE (c.seeker.id = :userId OR c.referrer.id = :userId)
+  AND c.active = true
+ORDER BY c.lastMessageAt DESC NULLS LAST, c.id DESC
+""")
+    Page<Chat> findFirstPage(@Param("userId") UUID userId, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"seeker", "referrer", "referral"})
+    @Query("""
+SELECT c FROM Chat c
+WHERE (c.seeker.id = :userId OR c.referrer.id = :userId)
+  AND c.active = true
+  AND c.lastMessageAt < :cursor
+ORDER BY c.lastMessageAt DESC NULLS LAST, c.id DESC
+""")
+    Page<Chat> findNextPage(
+            @Param("userId") UUID userId,
+            @Param("cursor") LocalDateTime cursor,
+            Pageable pageable
+    );
 
 
     //  FIX: EntityGraph instead of JOIN FETCH

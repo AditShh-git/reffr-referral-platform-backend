@@ -22,11 +22,26 @@ public final class ChatWsDto {
         private String content;
     }
 
-    // ── Read receipt event ───────────────────────────────────────────
+    // ── Typing indicator ─────────────────────────────────────────────
+    
+    @Getter @Setter
+    public static class TypingRequest {
+        private boolean typing;
+    }
 
     @Getter @Builder
-    public static class ReadReceiptEvent {
+    public static class TypingEvent {
+        private UUID userId;
+        private boolean typing;
+    }
+
+    // ── Status update event (READ / DELIVERED) ───────────────────────
+
+    @Getter @Builder
+    public static class MessageStatusUpdateEvent {
         private UUID chatId;
-        private UUID readByUserId;
+        private java.util.List<UUID> messageIds;
+        private com.Reffr_Backend.module.chat.entity.MessageStatus status;
+        private java.time.Instant timestamp;
     }
 }
