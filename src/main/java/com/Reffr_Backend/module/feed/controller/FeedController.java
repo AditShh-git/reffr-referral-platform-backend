@@ -31,12 +31,12 @@ public class FeedController {
     @GetMapping
     @Operation(summary = "Get personalized feed", description = "Returns active posts ranked by matching skills, OFFERs, and verified users.")
     @RequiresOnboarding
-    public ResponseEntity<ApiResponse<Page<PostDto.FeedResponse>>> getFeed(
+    public ResponseEntity<ApiResponse<CursorPagedResponse<PostDto.FeedResponse>>> getFeed(
             @RequestParam(defaultValue = "0")  int page,
             @RequestParam(defaultValue = "20") int size) {
         
         Pageable pageable = PaginationUtils.of(page, size);
-        Page<PostDto.FeedResponse> result = postService.getPersonalizedFeed(pageable, SecurityUtils.getCurrentUserId());
+        CursorPagedResponse<PostDto.FeedResponse> result = postService.getPersonalizedFeed(pageable, SecurityUtils.getCurrentUserId());
         return ResponseEntity.ok(ApiResponse.success("Feed retrieved successfully", result));
     }
 }

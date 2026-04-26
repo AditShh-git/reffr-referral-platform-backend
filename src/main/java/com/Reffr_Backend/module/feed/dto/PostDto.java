@@ -22,6 +22,23 @@ public final class PostDto {
 
     private PostDto() {}
 
+    // ── Search Filters ────────────────────────────────────────────────
+
+    @lombok.Data
+    @lombok.Builder
+    @lombok.NoArgsConstructor
+    @lombok.AllArgsConstructor
+    public static class SearchFilters {
+        private Post.PostType type;
+        private String company;
+        private String role;
+        private Integer minExp;
+        private Integer maxExp;
+        private String sort; // "latest" or "trending"
+        private Instant cursor;
+        private UUID authorId;
+    }
+
     // ── Create ────────────────────────────────────────────────────────
 
     @Getter @Setter

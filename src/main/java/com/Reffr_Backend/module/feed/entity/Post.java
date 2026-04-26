@@ -67,6 +67,7 @@ public class Post {
     @Column(name = "expires_at")
     private Instant expiresAt;
 
+    @org.hibernate.annotations.BatchSize(size = 25)
     @OneToMany(mappedBy = "post", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<PostTag> tags = new ArrayList<>();
