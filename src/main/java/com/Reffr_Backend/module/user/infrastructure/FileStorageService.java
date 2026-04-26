@@ -32,4 +32,10 @@ public interface FileStorageService {
      * Check if a file exists at the given storage key.
      */
     boolean exists(String storageKey);
+
+    /**
+     * Read the raw bytes for a stored file.
+     * Used by background processors such as resume parsing.
+     */
+    byte[] read(String storageKey);
 }

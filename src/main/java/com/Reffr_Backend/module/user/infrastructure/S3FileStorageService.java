@@ -82,6 +82,19 @@ public class S3FileStorageService implements FileStorageService {
         }
     }
 
+    @Override
+    public byte[] read(String storageKey) {
+        try {
+            return s3Client.getObjectAsBytes(GetObjectRequest.builder()
+                    .bucket(bucket)
+                    .key(storageKey)
+                    .build()).asByteArray();
+        } catch (Exception e) {
+            log.error("S3 read failed for key={}", storageKey, e);
+            throw new RuntimeException("File read failed", e);
+        }
+    }
+
     private String buildResumeKey(UUID userId, String originalFilename) {
         String ext = originalFilename != null && originalFilename.contains(".")
                 ? originalFilename.substring(originalFilename.lastIndexOf('.') + 1).toLowerCase()

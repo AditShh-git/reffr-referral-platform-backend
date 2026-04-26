@@ -3,10 +3,7 @@ package com.Reffr_Backend.module.user.controller;
 import com.Reffr_Backend.common.response.ApiResponse;
 import com.Reffr_Backend.common.util.SecurityUtils;
 import com.Reffr_Backend.module.user.dto.UserDto;
-import com.Reffr_Backend.module.user.service.UserProfileService;
-import com.Reffr_Backend.module.user.service.UserResumeService;
-import com.Reffr_Backend.module.user.service.UserSearchService;
-import com.Reffr_Backend.module.user.service.CompanyVerificationService;
+import com.Reffr_Backend.module.user.service.*;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -33,8 +30,20 @@ public class UserController {
     private final UserResumeService userResumeService;
     private final UserSearchService userSearchService;
     private final CompanyVerificationService companyVerificationService;
+    private final ResumeParsingService resumeParsingService;
+    private final UserFollowService userFollowService;
+    private final ProfileViewService profileViewService;
 
     // ── Own profile ────────────────────────────────────────────────
+    
+    @Operation(summary = "Get parsed resume data", description = "Fetch suggested skills and role from the uploaded resume")
+    @GetMapping("/me/resume/parsed")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<UserDto.ParsedResumeResponse>> getParsedResume() {
+        return ResponseEntity.ok(ApiResponse.success(
+                resumeParsingService.getParsedData(SecurityUtils.getCurrentUserId())
+        ));
+    }
 
     @Operation(summary = "Get my profile", description = "Fetch authenticated user's profile details")
     @GetMapping("/me")
@@ -42,6 +51,15 @@ public class UserController {
     public ResponseEntity<ApiResponse<UserDto.ProfileResponse>> getMyProfile() {
         return ResponseEntity.ok(ApiResponse.success(
                 userProfileService.getMyProfile()
+        ));
+    }
+
+    @Operation(summary = "Get profile view history", description = "Returns the latest profile viewers. Current implementation exposes the free-tier limit.")
+    @GetMapping("/me/profile-views")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<UserDto.ProfileViewHistoryResponse>> getProfileViews() {
+        return ResponseEntity.ok(ApiResponse.success(
+                profileViewService.getProfileViews(SecurityUtils.getCurrentUserId())
         ));
     }
 
@@ -187,7 +205,7 @@ public class UserController {
             @PathVariable String username) {
 
         return ResponseEntity.ok(ApiResponse.success(
-                userProfileService.getPublicProfile(username)
+                userProfileService.getPublicProfile(username, tryGetCurrentUserId())
         ));
     }
 
@@ -200,6 +218,22 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.success(
                 userResumeService.generateAccessUrl(username)
         ));
+    }
+
+    @Operation(summary = "Follow a user", description = "Creates a follower relationship for future updates")
+    @PostMapping("/{userId}/follow")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<Void>> followUser(@PathVariable java.util.UUID userId) {
+        userFollowService.follow(SecurityUtils.getCurrentUserId(), userId);
+        return ResponseEntity.ok(ApiResponse.success("Followed successfully", null));
+    }
+
+    @Operation(summary = "Unfollow a user", description = "Removes a follower relationship")
+    @DeleteMapping("/{userId}/unfollow")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<Void>> unfollowUser(@PathVariable java.util.UUID userId) {
+        userFollowService.unfollow(SecurityUtils.getCurrentUserId(), userId);
+        return ResponseEntity.ok(ApiResponse.success("Unfollowed successfully", null));
     }
 
     // ── Search ─────────────────────────────────────────────────────
@@ -234,5 +268,13 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.success(
                 userSearchService.findVerifiedReferrers(company, pageable)
         ));
+    }
+
+    private java.util.UUID tryGetCurrentUserId() {
+        try {
+            return SecurityUtils.getCurrentUserId();
+        } catch (Exception e) {
+            return null;
+        }
     }
 }

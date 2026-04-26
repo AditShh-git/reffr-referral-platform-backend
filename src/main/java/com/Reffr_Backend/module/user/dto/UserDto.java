@@ -1,24 +1,22 @@
 package com.Reffr_Backend.module.user.dto;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
 import com.Reffr_Backend.module.user.entity.User;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.validation.constraints.*;
 import lombok.*;
+
 import java.io.Serializable;
-
-
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
 public final class UserDto {
 
-    // ── Onboarding Request ──────────────────────────────────────────────
-    @Getter @Setter
+    @Getter
+    @Setter
     public static class OnboardingRequest {
-        @NotBlank(message = "Role is required")
-        @Size(max = 150)
-        private String currentRole;
+        @Size(max = 150, message = "Name must be at most 150 characters")
+        private String name;
 
         @NotBlank(message = "Email is required")
         @Email(message = "Invalid email format")
@@ -29,21 +27,34 @@ public final class UserDto {
         @Size(min = 3, message = "You must provide at least 3 skills")
         private List<@NotBlank String> skills;
 
-        @NotNull(message = "Experience is required")
-        @Min(value = 0, message = "Experience cannot be negative")
-        private Integer yearsOfExperience;
-
-        @NotBlank(message = "Resume URL is required")
-        private String resumeUrl;
+        @NotBlank(message = "Role is required")
+        @Size(max = 150)
+        private String currentRole;
     }
 
+    @Getter
+    @Setter
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ParsedResumeResponse {
+        public enum ParsingStatus { PENDING, READY, NOT_FOUND, FAILED }
+        public enum ConfidenceLevel { HIGH, MEDIUM, LOW }
+
+        private ParsingStatus status;
+        private List<String> skills;
+        private String role;
+        private ConfidenceLevel confidence;
+        private String error;
+        private Instant parsedAt;
+        private String resumeKey;
+    }
 
     private UserDto() {}
 
-    // ── Profile Update Request ──────────────────────────────────────────
-    @Getter @Setter
+    @Getter
+    @Setter
     public static class UpdateProfileRequest {
-
         @Size(max = 150, message = "Name must be at most 150 characters")
         private String name;
 
@@ -73,8 +84,8 @@ public final class UserDto {
         private List<ExperienceRequest> experiences;
     }
 
-    // ── Experience / Verification Request ──
-    @Getter @Setter
+    @Getter
+    @Setter
     public static class ExperienceRequest {
         @NotBlank(message = "Company is required")
         @Size(max = 150)
@@ -89,27 +100,31 @@ public final class UserDto {
         private boolean current;
     }
 
-    @Getter @Setter
+    @Getter
+    @Setter
     public static class PublicProofRequest {
         @NotBlank(message = "Company is required")
         private String company;
+
         @NotBlank(message = "Profile URL is required")
         private String profileUrl;
     }
 
-    @Getter @Setter
+    @Getter
+    @Setter
     public static class DocumentProofRequest {
         @NotBlank(message = "Company is required")
         private String company;
+
         @NotBlank(message = "Document key is required")
         private String documentKey;
     }
 
-    // ── Full Profile Response (own profile) ────────────────────────────
-    @Getter @Builder
+    @Getter
+    @Builder
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class ProfileResponse {
-        private UUID   id;
+        private UUID id;
         private String githubUsername;
         private String githubUrl;
         private String name;
@@ -119,26 +134,18 @@ public final class UserDto {
         private String location;
         private String currentCompany;
         private String currentRole;
-        private Short  yearsOfExperience;
-        private List<String>             skills;
-
-        // Resume
+        private Short yearsOfExperience;
+        private List<String> skills;
         private boolean hasResume;
-        private String  resumeOriginalName;
+        private String resumeOriginalName;
         private Instant resumeUploadedAt;
-
-        // Company verification & History
         private List<VerificationResponse> companyVerifications;
-
-        // Reputation (feedback-based — no individual outcome details)
         private Integer totalReferralsGiven;
         private Integer positiveFeedbackCount;
         private Integer negativeFeedbackCount;
-        private Double  referralSuccessRate;
-
+        private Double referralSuccessRate;
         private Instant createdAt;
         private Instant lastSeenAt;
-
         private boolean onboardingCompleted;
 
         public static ProfileResponse from(User user) {
@@ -170,11 +177,11 @@ public final class UserDto {
         }
     }
 
-    // ── Public Profile Response (viewed by others) ─────────────────────
-    @Getter @Builder
+    @Getter
+    @Builder
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class PublicProfileResponse {
-        private UUID   id;
+        private UUID id;
         private String githubUsername;
         private String githubUrl;
         private String name;
@@ -183,20 +190,15 @@ public final class UserDto {
         private String location;
         private String currentCompany;
         private String currentRole;
-        private Short  yearsOfExperience;
-        private List<String>             skills;
-
-        // Resume (URL - pre-signed from S3)
+        private Short yearsOfExperience;
+        private List<String> skills;
         private boolean hasResume;
-        private String  resumeUrl;
-
+        private String resumeUrl;
         private List<VerificationResponse> companyVerifications;
-
-        // Reputation (aggregated only — no individual outcomes)
         private Integer totalReferralsGiven;
         private Integer positiveFeedbackCount;
         private Integer negativeFeedbackCount;
-        private Double  referralSuccessRate;
+        private Double referralSuccessRate;
 
         public static PublicProfileResponse from(User user, String resumeUrl) {
             return PublicProfileResponse.builder()
@@ -222,18 +224,18 @@ public final class UserDto {
         }
     }
 
-    // ── Verification response (History) ──
-    @Getter @Builder
+    @Getter
+    @Builder
     public static class VerificationResponse {
-        private UUID    id;
-        private String  company;
-        private String  role;
-        private Short   startYear;
-        private Short   endYear;
+        private UUID id;
+        private String company;
+        private String role;
+        private Short startYear;
+        private Short endYear;
         private boolean current;
-        private String  status;
+        private String status;
         private boolean verified;
-        private String  proofType;
+        private String proofType;
         private Instant verifiedAt;
 
         public static VerificationResponse from(
@@ -253,17 +255,51 @@ public final class UserDto {
         }
     }
 
+    @Getter
+    @Builder
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class ProfileViewItem {
+        private UUID id;
+        private String githubUsername;
+        private String name;
+        private String avatarUrl;
+        private String currentCompany;
+        private String currentRole;
+        private Instant viewedAt;
 
-    // ── Summary (used in feeds, referral cards) ────────────────────────
-    @Getter @Builder
+        public static ProfileViewItem from(User user, Instant viewedAt) {
+            return ProfileViewItem.builder()
+                    .id(user.getId())
+                    .githubUsername(user.getGithubUsername())
+                    .name(user.getName())
+                    .avatarUrl(user.getAvatarUrl())
+                    .currentCompany(user.getCurrentCompany())
+                    .currentRole(user.getCurrentRole())
+                    .viewedAt(viewedAt)
+                    .build();
+        }
+    }
+
+    @Getter
+    @Builder
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class ProfileViewHistoryResponse {
+        private List<ProfileViewItem> viewers;
+        private boolean limited;
+        private int limit;
+        private long totalViews;
+    }
+
+    @Getter
+    @Builder
     public static class UserSummary implements Serializable {
-        private UUID    id;
-        private String  githubUsername;
-        private String  name;
-        private String  avatarUrl;
-        private String  currentCompany;
-        private String  currentRole;
-        private Double  referralSuccessRate;
+        private UUID id;
+        private String githubUsername;
+        private String name;
+        private String avatarUrl;
+        private String currentCompany;
+        private String currentRole;
+        private Double referralSuccessRate;
 
         public static UserSummary from(User user) {
             return UserSummary.builder()

@@ -37,6 +37,7 @@ public class UserResumeServiceImpl implements UserResumeService {
     private final UserRepository userRepository;
     private final FileStorageService fileStorage;     // Fix 2: interface, not S3Service
     private final UserProfileService userProfileService;
+    private final com.Reffr_Backend.module.user.service.ResumeParsingService resumeParsingService;
 
     @Transactional
     @CacheEvict(value = "publicProfile", key = "#result.githubUsername")
@@ -54,6 +55,10 @@ public class UserResumeServiceImpl implements UserResumeService {
 
         // Fix 3: domain owns mutation
         UserDomain.attachResume(user, key, file.getOriginalFilename());
+
+        // Trigger asynchronous parsing
+        resumeParsingService.clearParsedData(user.getId());
+        resumeParsingService.parseAndStore(user.getId(), key, file.getOriginalFilename());
 
         return UserDto.ProfileResponse.from(userRepository.save(user));
     }

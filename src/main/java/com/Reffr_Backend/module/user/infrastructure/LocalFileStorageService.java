@@ -72,4 +72,15 @@ public class LocalFileStorageService implements FileStorageService {
 
         return exists;
     }
+
+    @Override
+    public byte[] read(String storageKey) {
+        try {
+            Path path = Paths.get(uploadDir + storageKey);
+            return Files.readAllBytes(path);
+        } catch (IOException e) {
+            log.error("File read failed for key {}: {}", storageKey, e.getMessage(), e);
+            throw new RuntimeException("File read failed", e);
+        }
+    }
 }

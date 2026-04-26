@@ -9,7 +9,7 @@ public interface UserProfileService {
 
     UserDto.ProfileResponse getMyProfile();
 
-    UserDto.PublicProfileResponse getPublicProfile(String username);
+    UserDto.PublicProfileResponse getPublicProfile(String username, UUID viewerId);
 
     UserDto.ProfileResponse updateProfile(UserDto.UpdateProfileRequest req);
 
