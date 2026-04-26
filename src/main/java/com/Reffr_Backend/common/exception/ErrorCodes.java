@@ -53,4 +53,6 @@ public final class ErrorCodes {
     public static final String FILE_TOO_LARGE       = "FILE_TOO_LARGE";
     public static final String OTP_LIMIT_EXCEEDED   = "OTP_LIMIT_EXCEEDED";
     public static final String DUPLICATE_ACCEPTED   = "DUPLICATE_ACCEPTED";
+    public static final String NOT_ELIGIBLE         = "NOT_ELIGIBLE";
+    public static final String RATE_LIMIT_EXCEEDED  = "RATE_LIMIT_EXCEEDED";
 }

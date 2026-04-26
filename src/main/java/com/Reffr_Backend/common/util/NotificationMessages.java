@@ -50,4 +50,21 @@ public final class NotificationMessages {
     public static String newMessageBody(String content) {
         return content.length() > 80 ? content.substring(0, 77) + "..." : content;
     }
+
+    public static String profileViewedTitle() {
+        return "Profile viewed";
+    }
+
+    public static String profileViewedBody(String viewerName) {
+        return (viewerName == null || viewerName.isBlank() ? "Someone" : viewerName) + " viewed your profile";
+    }
+
+    public static String newPostTitle() {
+        return "New post from someone you follow";
+    }
+
+    public static String newPostBody(String authorName) {
+        return (authorName == null || authorName.isBlank() ? "Someone" : authorName)
+                + " posted a new referral opportunity";
+    }
 }

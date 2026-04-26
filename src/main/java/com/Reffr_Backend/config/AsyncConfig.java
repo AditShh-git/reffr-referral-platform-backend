@@ -27,4 +27,19 @@ public class AsyncConfig {
         executor.initialize();
         return executor;
     }
+
+    /**
+     * Dedicated thread pool for resume parsing.
+     * Bounded to prevent resource exhaustion during spikes.
+     */
+    @Bean(name = "resumeParsingExecutor")
+    public Executor resumeParsingExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(3);
+        executor.setMaxPoolSize(10);
+        executor.setQueueCapacity(50);
+        executor.setThreadNamePrefix("resume-parse-");
+        executor.initialize();
+        return executor;
+    }
 }

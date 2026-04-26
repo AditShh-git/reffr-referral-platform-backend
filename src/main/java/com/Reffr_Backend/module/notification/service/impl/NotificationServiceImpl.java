@@ -68,7 +68,13 @@ public class NotificationServiceImpl implements NotificationService {
     @Transactional(readOnly = true)
     public CursorPagedResponse<NotificationDto.Response> getAll(UUID userId, Instant lastCreatedAt, Pageable pageable) {
         LocalDateTime cursor = lastCreatedAt != null ? LocalDateTime.ofInstant(lastCreatedAt, ZoneOffset.UTC) : null;
-        Page<Notification> notifications = notificationRepository.findByUserId(userId, cursor, pageable);
+        Page<Notification> notifications;
+
+        if (cursor == null) {
+            notifications = notificationRepository.findByUserId(userId, pageable);
+        } else {
+            notifications = notificationRepository.findByUserIdWithCursor(userId, cursor, pageable);
+        }
         
         return buildCursorResponse(notifications);
     }
@@ -77,7 +83,13 @@ public class NotificationServiceImpl implements NotificationService {
     @Transactional(readOnly = true)
     public CursorPagedResponse<NotificationDto.Response> getUnread(UUID userId, Instant lastCreatedAt, Pageable pageable) {
         LocalDateTime cursor = lastCreatedAt != null ? LocalDateTime.ofInstant(lastCreatedAt, ZoneOffset.UTC) : null;
-        Page<Notification> notifications = notificationRepository.findUnreadByUserId(userId, cursor, pageable);
+        Page<Notification> notifications;
+
+        if (cursor == null) {
+            notifications = notificationRepository.findByUserIdAndReadFalse(userId, pageable);
+        } else {
+            notifications = notificationRepository.findUnreadByUserIdWithCursor(userId, cursor, pageable);
+        }
         
         return buildCursorResponse(notifications);
     }

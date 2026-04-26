@@ -11,6 +11,9 @@ public enum NotificationType {
     // Chat
     NEW_MESSAGE,                // recipient gets this when a message arrives
 
+    // Feed / follow
+    NEW_POST,                   // follower gets this when a followed user creates a post
+
     // Profile
     PROFILE_VIEWED              // user gets this when someone views their profile
 }
