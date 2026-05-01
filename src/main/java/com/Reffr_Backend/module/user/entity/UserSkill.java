@@ -8,7 +8,7 @@ import java.time.Instant;
 
 @Entity
 @Table(name = "user_skills",
-        uniqueConstraints = @UniqueConstraint(columnNames = {"user_id", "skill"}))
+        uniqueConstraints = @UniqueConstraint(name = "uk_user_skills_user_id_skill_name", columnNames = {"user_id", "skill_name"}))
 @Getter @Setter
 @Builder
 @NoArgsConstructor
@@ -23,8 +23,15 @@ public class UserSkill {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(nullable = false, length = 100)
-    private String skill;
+    @Column(name = "skill_name", nullable = false, length = 100)
+    private String skillName;
+
+    @Column(name = "category", length = 30)
+    private String category;
+
+    @Column(name = "is_verified", nullable = false)
+    @Builder.Default
+    private boolean verified = false;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)

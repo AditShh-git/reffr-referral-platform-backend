@@ -75,23 +75,56 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.success("Onboarding completed successfully", null));
     }
 
-    @Operation(summary = "Get onboarding status", description = "Check if the authenticated user has completed onboarding")
+    @Operation(summary = "Get onboarding status", description = "Check detailed onboarding progress including profile completeness, resume upload, and skill parsing status")
     @GetMapping("/me/onboarding-status")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<ApiResponse<java.util.Map<String, Boolean>>> getOnboardingStatus() {
-        boolean status = userProfileService.getOnboardingStatus();
-        return ResponseEntity.ok(ApiResponse.success(java.util.Map.of("completed", status)));
+    public ResponseEntity<ApiResponse<UserDto.OnboardingStatusResponse>> getOnboardingStatus() {
+        return ResponseEntity.ok(ApiResponse.success(userProfileService.getOnboardingStatus()));
     }
 
-    @Operation(summary = "Update profile", description = "Update authenticated user's profile (partial update supported)")
+    @Operation(summary = "Update profile (DEPRECATED)", description = "Deprecated: use granular PATCH/PUT endpoints instead")
     @PutMapping("/me")
     @PreAuthorize("isAuthenticated()")
+    @Deprecated
     public ResponseEntity<ApiResponse<UserDto.ProfileResponse>> updateProfile(
             @Valid @RequestBody UserDto.UpdateProfileRequest request) {
 
         return ResponseEntity.ok(ApiResponse.success(
                 "Profile updated successfully",
                 userProfileService.updateProfile(request)
+        ));
+    }
+
+    @Operation(summary = "Update email", description = "Update authenticated user's email")
+    @PatchMapping("/me/email")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<UserDto.ProfileResponse>> updateEmail(
+            @Valid @RequestBody UserDto.UpdateEmailRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Email updated successfully",
+                userProfileService.updateEmail(request)
+        ));
+    }
+
+    @Operation(summary = "Update profile details", description = "Update authenticated user's profile (partial update supported)")
+    @PatchMapping("/me/profile")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<UserDto.ProfileResponse>> updateProfileDetails(
+            @Valid @RequestBody UserDto.UpdateProfileDetailsRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Profile updated successfully",
+                userProfileService.updateProfileDetails(request)
+        ));
+    }
+
+    @Operation(summary = "Update skills", description = "Update authenticated user's skills")
+    @PutMapping("/me/skills")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<UserDto.ProfileResponse>> updateSkills(
+            @Valid @RequestBody UserDto.UpdateSkillsRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Skills updated successfully",
+                userProfileService.updateSkills(request)
         ));
     }
 
@@ -141,13 +174,15 @@ public class UserController {
     @Operation(summary = "Add work experience", description = "Add a work experience entry (unverified by default)")
     @PostMapping("/me/experience")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<ApiResponse<Void>> addExperience(
+    public ResponseEntity<ApiResponse<UserDto.ProfileResponse>> addExperience(
             @Valid @RequestBody UserDto.ExperienceRequest request) {
-        
-        companyVerificationService.addExperience(SecurityUtils.getCurrentUserId(), request);
-        return ResponseEntity.ok(ApiResponse.success("Experience added successfully", null));
+        return ResponseEntity.ok(ApiResponse.success(
+                "Experience added successfully",
+                userProfileService.appendExperience(request)
+        ));
     }
 
+    /* ── Company Verification Disabled Temporary ──
     @Operation(summary = "Send company verification OTP", description = "Sends an OTP to the user's corporate email")
     @PostMapping("/me/company/send-otp")
     @PreAuthorize("isAuthenticated()")
@@ -187,6 +222,7 @@ public class UserController {
         companyVerificationService.uploadDocument(SecurityUtils.getCurrentUserId(), request);
         return ResponseEntity.ok(ApiResponse.success("Document submitted for verification", null));
     }
+    */
 
     @Operation(summary = "Get verification history", description = "Fetch all verification and experience records for the user")
     @GetMapping("/me/verifications")

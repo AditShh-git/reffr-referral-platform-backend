@@ -2,6 +2,7 @@ package com.Reffr_Backend.module.user.dto;
 
 import com.Reffr_Backend.module.user.entity.User;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.*;
 import lombok.*;
 
@@ -37,24 +38,31 @@ public final class UserDto {
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
-    public static class ParsedResumeResponse {
-        public enum ParsingStatus { PENDING, READY, NOT_FOUND, FAILED }
-        public enum ConfidenceLevel { HIGH, MEDIUM, LOW }
+    @Schema(description = "User onboarding and profile completeness status")
+    public static class OnboardingStatusResponse {
+        @Schema(description = "Whether basic profile details (name, email, role) are completed", example = "true")
+        private boolean profileCompleted;
 
-        private ParsingStatus status;
-        private List<String> skills;
-        private String role;
-        private ConfidenceLevel confidence;
-        private String error;
-        private Instant parsedAt;
-        private String resumeKey;
+        @Schema(description = "Whether the user has uploaded a resume", example = "true")
+        private boolean resumeUploaded;
+
+        @Schema(description = "Whether the resume has been successfully parsed into skills", example = "true")
+        private boolean skillsParsed;
     }
 
     private UserDto() {}
 
     @Getter
     @Setter
-    public static class UpdateProfileRequest {
+    public static class UpdateEmailRequest {
+        @NotBlank(message = "Email is required")
+        @Email(message = "Invalid email format")
+        @Pattern(regexp = "^(?!.*noreply\\.github\\.com).*$", message = "GitHub noreply emails are not allowed")
+        private String email;
+    }
+
+    @Getter
+    public static class UpdateProfileDetailsRequest {
         @Size(max = 150, message = "Name must be at most 150 characters")
         private String name;
 
@@ -72,16 +80,37 @@ public final class UserDto {
 
         @Min(value = 0, message = "Years of experience cannot be negative")
         @Max(value = 50, message = "Years of experience seems too high")
+        @Setter
         private Short yearsOfExperience;
 
-        @Email(message = "Invalid email format")
-        @Pattern(regexp = "^(?!.*noreply\\.github\\.com).*$", message = "GitHub noreply emails are not allowed")
+        public void setName(String name) { this.name = name != null ? name.trim() : null; }
+        public void setBio(String bio) { this.bio = bio != null ? bio.trim() : null; }
+        public void setLocation(String location) { this.location = location != null ? location.trim() : null; }
+        public void setCurrentCompany(String currentCompany) { this.currentCompany = currentCompany != null ? currentCompany.trim() : null; }
+        public void setCurrentRole(String currentRole) { this.currentRole = currentRole != null ? currentRole.trim() : null; }
+    }
+
+    @Getter
+    @Setter
+    @Deprecated
+    public static class UpdateProfileRequest {
+        private String name;
+        private String bio;
+        private String location;
+        private String currentCompany;
+        private String currentRole;
+        private Short yearsOfExperience;
         private String email;
-
-        @Size(max = 20, message = "Maximum 20 skills allowed")
-        private List<@Size(max = 100) String> skills;
-
+        private List<String> skills;
         private List<ExperienceRequest> experiences;
+    }
+
+    @Getter
+    @Setter
+    public static class UpdateSkillsRequest {
+        @NotNull(message = "Skills cannot be null")
+        @Size(max = 20, message = "Maximum 20 skills allowed")
+        private List<@NotBlank @Size(max = 100) String> skills;
     }
 
     @Getter
@@ -95,8 +124,14 @@ public final class UserDto {
         @Size(max = 150)
         private String role;
 
+        @Min(value = 1900, message = "Start year is too early")
+        @Max(value = 2100, message = "Start year is too late")
         private Short startYear;
+
+        @Min(value = 1900, message = "End year is too early")
+        @Max(value = 2100, message = "End year is too late")
         private Short endYear;
+
         private boolean current;
     }
 
@@ -160,7 +195,7 @@ public final class UserDto {
                     .location(user.getLocation())
                     .currentCompany(user.getCurrentCompany())
                     .currentRole(user.getCurrentRole())
-                    .skills(user.getSkills().stream().map(s -> s.getSkill()).toList())
+                    .skills(user.getSkills().stream().map(s -> s.getSkillName()).toList())
                     .companyVerifications(user.getCompanyVerifications().stream()
                             .map(VerificationResponse::from).toList())
                     .hasResume(user.hasResume())
@@ -174,6 +209,36 @@ public final class UserDto {
                     .lastSeenAt(user.getLastSeenAt())
                     .onboardingCompleted(user.isOnboardingCompleted())
                     .build();
+        }
+    }
+
+    @Getter
+    @Setter
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class ParsedResumeResponse {
+        public enum ParsingStatus { PENDING, READY, NOT_FOUND, FAILED, WEAK_DATA }
+        public enum ConfidenceLevel { HIGH, MEDIUM, LOW }
+
+        private Integer version;
+        private ParsingStatus status;
+        private List<ParsedSkill> skills;
+        private String role;
+        private ConfidenceLevel confidence;
+        private String error;
+        private Instant parsedAt;
+        private String resumeKey;
+
+        @Getter
+        @Setter
+        @Builder
+        @NoArgsConstructor
+        @AllArgsConstructor
+        public static class ParsedSkill {
+            private String name;
+            private String category;
         }
     }
 
@@ -211,7 +276,7 @@ public final class UserDto {
                     .location(user.getLocation())
                     .currentCompany(user.getCurrentCompany())
                     .currentRole(user.getCurrentRole())
-                    .skills(user.getSkills().stream().map(s -> s.getSkill()).toList())
+                    .skills(user.getSkills().stream().map(s -> s.getSkillName()).toList())
                     .companyVerifications(user.getCompanyVerifications().stream()
                             .map(VerificationResponse::from).toList())
                     .hasResume(user.hasResume())

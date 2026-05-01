@@ -110,12 +110,6 @@ public class UserResumeServiceImpl implements UserResumeService {
         if (currentUserId == null) {
             throw new UnauthorizedException(ErrorCodes.AUTH_REQUIRED, "User not authenticated");
         }
-
-        boolean isOwner = currentUserId.equals(targetUser.getId());
-        boolean isVerified = targetUser.isVerified();
-
-        if (!isOwner && !isVerified) {
-            throw new ForbiddenException(ErrorCodes.ACCESS_DENIED, "Access denied");
-        }
+        // Temporary: Allow all authenticated users to access resume
     }
 }

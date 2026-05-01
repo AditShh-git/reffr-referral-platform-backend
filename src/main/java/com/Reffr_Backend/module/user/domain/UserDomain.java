@@ -4,9 +4,12 @@ import com.Reffr_Backend.module.user.entity.User;
 import com.Reffr_Backend.module.user.entity.UserCompanyVerification;
 import com.Reffr_Backend.module.user.entity.VerificationStatus;
 import com.Reffr_Backend.module.user.entity.UserSkill;
+import com.Reffr_Backend.module.user.dto.UserDto;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
 
 /**
  * Fix 3: Domain logic lives here, not scattered across services.
@@ -29,28 +32,62 @@ public final class UserDomain {
             newSkills.stream()
                     .map(String::trim)
                     .filter(s -> !s.isBlank())
-                    .map(String::toLowerCase)
                     .distinct()
-                    .map(skill -> UserSkill.builder().user(user).skill(skill).build())
+                    .map(skill -> UserSkill.builder()
+                            .user(user)
+                            .skillName(skill.trim())
+                            .category(inferCategory(skill).orElse(null))
+                            .verified(true)
+                            .build())
                     .forEach(user.getSkills()::add);
         }
     }
 
-    public static void replaceExperiences(User user,
+    public static void replaceParsedSkills(User user, List<UserDto.ParsedResumeResponse.ParsedSkill> parsedSkills, boolean isVerified) {
+        user.getSkills().clear();
+        if (parsedSkills != null) {
+            parsedSkills.stream()
+                    .filter(skill -> skill != null && skill.getName() != null && !skill.getName().isBlank())
+                    .map(skill -> UserSkill.builder()
+                            .user(user)
+                            .skillName(skill.getName().trim())
+                            .category(skill.getCategory())
+                            .verified(isVerified)
+                            .build())
+                    .forEach(user.getSkills()::add);
+        }
+    }
+
+    public static void appendExperiences(User user,
                                           List<ExperienceCommand> commands) {
-        user.getCompanyVerifications().clear();
-        commands.stream()
-                .map(cmd -> UserCompanyVerification.builder()
-                        .user(user)
-                        .company(cmd.company())
-                        .role(cmd.role())
-                        .startYear(cmd.startYear())
-                        .endYear(cmd.endYear())
-                        .current(cmd.current())
-                        .verificationStatus(cmd.current() ? VerificationStatus.CURRENT : VerificationStatus.PAST)
-                        .verified(false) // Manual entry is unverified by default
-                        .build())
-                .forEach(user.getCompanyVerifications()::add);
+        if (commands == null) return;
+        for (ExperienceCommand cmd : commands) {
+            boolean isDuplicate = user.getCompanyVerifications().stream().anyMatch(v ->
+                    v.getCompany().equalsIgnoreCase(cmd.company()) &&
+                    v.getRole().equalsIgnoreCase(cmd.role()) &&
+                    java.util.Objects.equals(v.getStartYear(), cmd.startYear()));
+            if (isDuplicate) continue;
+
+            if (cmd.current()) {
+                user.getCompanyVerifications().stream()
+                        .filter(UserCompanyVerification::isCurrent)
+                        .forEach(v -> {
+                            v.setCurrent(false);
+                            v.setVerificationStatus(VerificationStatus.PAST);
+                        });
+            }
+
+            user.getCompanyVerifications().add(UserCompanyVerification.builder()
+                    .user(user)
+                    .company(cmd.company())
+                    .role(cmd.role())
+                    .startYear(cmd.startYear())
+                    .endYear(cmd.endYear())
+                    .current(cmd.current())
+                    .verificationStatus(cmd.current() ? VerificationStatus.CURRENT : VerificationStatus.PAST)
+                    .verified(false) // Manual entry is unverified by default
+                    .build());
+        }
     }
 
     public static void attachResume(User user, String s3Key,
@@ -76,6 +113,24 @@ public final class UserDomain {
 
     public static void updateLastSeen(User user) {
         user.setLastSeenAt(Instant.now());
+    }
+
+    private static Optional<String> inferCategory(String skill) {
+        String normalized = skill == null ? "" : skill.trim().toLowerCase(Locale.ROOT);
+        if (normalized.isBlank()) return Optional.empty();
+        if (List.of("java", "python", "spring boot", "spring mvc", "jpa", "hibernate", "rest apis", "rest", "sql").contains(normalized)) {
+            return Optional.of("backend");
+        }
+        if (List.of("spring security", "jwt", "rbac").contains(normalized)) {
+            return Optional.of("security");
+        }
+        if (List.of("postgresql", "mysql", "redis", "mongodb").contains(normalized)) {
+            return Optional.of("database");
+        }
+        if (List.of("docker", "aws", "aws ec2", "flyway", "maven", "git").contains(normalized)) {
+            return Optional.of("devops");
+        }
+        return Optional.empty();
     }
 
     // ── Command record (replaces DTO inside domain layer) ─────────────

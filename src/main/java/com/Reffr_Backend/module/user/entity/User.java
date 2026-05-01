@@ -6,9 +6,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 @Entity
 @Table(name = "users")
@@ -74,7 +72,7 @@ public class User {
     // ── Company verification & History ──
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @Builder.Default
-    private java.util.List<UserCompanyVerification> companyVerifications = new java.util.ArrayList<>();
+    private Set<UserCompanyVerification> companyVerifications = new LinkedHashSet<>();
 
     // ── Referral reputation ──
     @Column(name = "total_referrals_given")
@@ -96,7 +94,7 @@ public class User {
     // ── Skills (one-to-many) ──
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @Builder.Default
-    private List<UserSkill> skills = new ArrayList<>();
+    private Set<UserSkill> skills = new LinkedHashSet<>();
 
 
     // ── System ──

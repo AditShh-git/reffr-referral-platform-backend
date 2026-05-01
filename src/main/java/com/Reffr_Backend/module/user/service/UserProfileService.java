@@ -11,11 +11,20 @@ public interface UserProfileService {
 
     UserDto.PublicProfileResponse getPublicProfile(String username, UUID viewerId);
 
+    @Deprecated
     UserDto.ProfileResponse updateProfile(UserDto.UpdateProfileRequest req);
+
+    UserDto.ProfileResponse updateEmail(UserDto.UpdateEmailRequest req);
+
+    UserDto.ProfileResponse updateProfileDetails(UserDto.UpdateProfileDetailsRequest req);
+
+    UserDto.ProfileResponse updateSkills(UserDto.UpdateSkillsRequest req);
+
+    UserDto.ProfileResponse appendExperience(UserDto.ExperienceRequest req);
 
     void onboardUser(UserDto.OnboardingRequest req);
 
-    boolean getOnboardingStatus();
+    UserDto.OnboardingStatusResponse getOnboardingStatus();
 
     void updateLastSeen(UUID userId);
 

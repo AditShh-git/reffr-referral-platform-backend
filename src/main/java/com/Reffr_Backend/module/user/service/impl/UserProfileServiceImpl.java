@@ -10,6 +10,7 @@ import com.Reffr_Backend.module.user.dto.UserDto;
 import com.Reffr_Backend.module.user.entity.User;
 import com.Reffr_Backend.module.user.repository.UserRepository;
 import com.Reffr_Backend.module.user.service.ProfileViewService;
+import com.Reffr_Backend.module.user.service.ResumeParsingService;
 import com.Reffr_Backend.module.user.service.UserProfileService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,10 +29,12 @@ public class UserProfileServiceImpl implements UserProfileService {
 
     private final UserRepository userRepository;
     private final ProfileViewService profileViewService;
+    private final ResumeParsingService resumeParsingService;
 
     @Transactional(readOnly = true)
     public UserDto.ProfileResponse getMyProfile() {
-        User user = findById(SecurityUtils.getCurrentUserId());
+        User user = userRepository.findByIdWithProfile(SecurityUtils.getCurrentUserId())
+                .orElseThrow(() -> new NotFoundException(ErrorCodes.USER_NOT_FOUND, "User not found"));
         return UserDto.ProfileResponse.from(user);
     }
 
@@ -54,6 +57,7 @@ public class UserProfileServiceImpl implements UserProfileService {
     }
 
     @Transactional
+    @Deprecated
     @org.springframework.cache.annotation.Caching(evict = {
         @CacheEvict(value = SecurityConstants.CACHE_PUBLIC_PROFILE, key = "#result.githubUsername"),
         @CacheEvict(value = "feed", key = "#result.id")
@@ -74,7 +78,6 @@ public class UserProfileServiceImpl implements UserProfileService {
             }
             user.setPrimaryEmail(req.getEmail());
             user.setEmailVerified(false);
-            log.info("User {} changed email to {} - primary email updated", user.getId(), req.getEmail());
         }
 
         if (req.getSkills() != null) {
@@ -86,19 +89,89 @@ public class UserProfileServiceImpl implements UserProfileService {
                             e.getCompany(), e.getRole(),
                             e.getStartYear(), e.getEndYear(), e.isCurrent()))
                     .toList();
-            UserDomain.replaceExperiences(user, commands);
+            UserDomain.appendExperiences(user, commands);
         }
+        updateOnboardingState(user);
+        return UserDto.ProfileResponse.from(userRepository.save(user));
+    }
 
+    @Transactional
+    @org.springframework.cache.annotation.Caching(evict = {
+        @CacheEvict(value = SecurityConstants.CACHE_PUBLIC_PROFILE, key = "#result.githubUsername"),
+        @CacheEvict(value = "feed", key = "#result.id")
+    })
+    public UserDto.ProfileResponse updateEmail(UserDto.UpdateEmailRequest req) {
+        User user = findById(SecurityUtils.getCurrentUserId());
+        if (req.getEmail() != null) {
+            String email = req.getEmail().trim().toLowerCase();
+            if (email.equals(user.getPrimaryEmail())) {
+                return UserDto.ProfileResponse.from(user);
+            }
+            if (userRepository.existsByPrimaryEmail(email)) {
+                throw new ConflictException(ErrorCodes.INVALID_EMAIL, "Email is already in use");
+            }
+            user.setPrimaryEmail(email);
+            user.setEmailVerified(false);
+            log.info("User {} changed email to {} - primary email updated", user.getId(), email);
+        }
+        updateOnboardingState(user);
+        return UserDto.ProfileResponse.from(userRepository.save(user));
+    }
+
+    @Transactional
+    @org.springframework.cache.annotation.Caching(evict = {
+        @CacheEvict(value = SecurityConstants.CACHE_PUBLIC_PROFILE, key = "#result.githubUsername"),
+        @CacheEvict(value = "feed", key = "#result.id")
+    })
+    public UserDto.ProfileResponse updateProfileDetails(UserDto.UpdateProfileDetailsRequest req) {
+        User user = findById(SecurityUtils.getCurrentUserId());
+        if (req.getName() != null) user.setName(req.getName());
+        if (req.getBio() != null) user.setBio(req.getBio());
+        if (req.getLocation() != null) user.setLocation(req.getLocation());
+        if (req.getCurrentCompany() != null) user.setCurrentCompany(req.getCurrentCompany());
+        if (req.getCurrentRole() != null) user.setCurrentRole(req.getCurrentRole());
+        if (req.getYearsOfExperience() != null) user.setYearsOfExperience(req.getYearsOfExperience());
+        updateOnboardingState(user);
+        return UserDto.ProfileResponse.from(userRepository.save(user));
+    }
+
+    @Transactional
+    @org.springframework.cache.annotation.Caching(evict = {
+        @CacheEvict(value = SecurityConstants.CACHE_PUBLIC_PROFILE, key = "#result.githubUsername"),
+        @CacheEvict(value = "feed", key = "#result.id")
+    })
+    public UserDto.ProfileResponse updateSkills(UserDto.UpdateSkillsRequest req) {
+        User user = findById(SecurityUtils.getCurrentUserId());
+        if (req.getSkills() != null) {
+            if (req.getSkills().isEmpty()) {
+                user.getSkills().clear();
+            } else {
+                UserDomain.replaceSkills(user, req.getSkills());
+            }
+        }
+        updateOnboardingState(user);
+        return UserDto.ProfileResponse.from(userRepository.save(user));
+    }
+
+    @Transactional
+    @org.springframework.cache.annotation.Caching(evict = {
+        @CacheEvict(value = SecurityConstants.CACHE_PUBLIC_PROFILE, key = "#result.githubUsername"),
+        @CacheEvict(value = "feed", key = "#result.id")
+    })
+    public UserDto.ProfileResponse appendExperience(UserDto.ExperienceRequest req) {
+        User user = findById(SecurityUtils.getCurrentUserId());
+        if (req != null) {
+            var cmd = new UserDomain.ExperienceCommand(
+                    req.getCompany(), req.getRole(),
+                    req.getStartYear(), req.getEndYear(), req.isCurrent());
+            UserDomain.appendExperiences(user, java.util.List.of(cmd));
+        }
         return UserDto.ProfileResponse.from(userRepository.save(user));
     }
 
     @Transactional
     public void onboardUser(UserDto.OnboardingRequest req) {
         User user = findById(SecurityUtils.getCurrentUserId());
-
-        if (user.isOnboardingCompleted()) {
-            throw new ConflictException(ErrorCodes.ONBOARDING_REQUIRED, "User is already onboarded");
-        }
 
         if (!user.hasResume()) {
             log.warn("User {} onboarding without resume - feature restriction might apply later", user.getId());
@@ -127,8 +200,19 @@ public class UserProfileServiceImpl implements UserProfileService {
     }
 
     @Transactional(readOnly = true)
-    public boolean getOnboardingStatus() {
-        return findById(SecurityUtils.getCurrentUserId()).isOnboardingCompleted();
+    public UserDto.OnboardingStatusResponse getOnboardingStatus() {
+        UUID userId = SecurityUtils.getCurrentUserId();
+        User user = findById(userId);
+        
+        boolean isProfileComplete = user.getPrimaryEmail() != null && !user.getPrimaryEmail().isBlank()
+                && user.getCurrentRole() != null && !user.getCurrentRole().isBlank()
+                && user.getSkills() != null && !user.getSkills().isEmpty();
+        
+        return UserDto.OnboardingStatusResponse.builder()
+                .profileCompleted(isProfileComplete)
+                .resumeUploaded(user.hasResume())
+                .skillsParsed(user.getSkills() != null && !user.getSkills().isEmpty())
+                .build();
     }
 
     @Async
@@ -151,5 +235,12 @@ public class UserProfileServiceImpl implements UserProfileService {
     public void deleteMyAccount() {
         UUID userId = SecurityUtils.getCurrentUserId();
         userRepository.deleteById(userId);
+    }
+
+    private void updateOnboardingState(User user) {
+        boolean isComplete = user.getPrimaryEmail() != null && !user.getPrimaryEmail().isBlank()
+                && user.getCurrentRole() != null && !user.getCurrentRole().isBlank()
+                && user.getSkills() != null && !user.getSkills().isEmpty();
+        user.setOnboardingCompleted(isComplete);
     }
 }
