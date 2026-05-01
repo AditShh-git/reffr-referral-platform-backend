@@ -4,6 +4,8 @@ import com.Reffr_Backend.module.user.dto.UserDto;
 import java.util.UUID;
 
 public interface ResumeParsingService {
+    UserDto.ParsedResumeResponse parseResumeText(String text);
+
     /**
      * Triggers asynchronous parsing of the resume.
      */
