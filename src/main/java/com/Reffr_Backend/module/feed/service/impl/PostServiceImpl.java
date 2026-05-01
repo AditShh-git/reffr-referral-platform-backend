@@ -192,7 +192,7 @@ public class PostServiceImpl implements PostService {
                 .orElseThrow(() -> new NotFoundException(ErrorCodes.USER_NOT_FOUND, "User not found"));
 
         java.util.Set<String> userSkills = user.getSkills().stream()
-                .map(s -> s.getSkill().toLowerCase())
+                .map(s -> s.getSkillName().toLowerCase())
                 .collect(java.util.stream.Collectors.toSet());
 
         Page<Post> posts;
