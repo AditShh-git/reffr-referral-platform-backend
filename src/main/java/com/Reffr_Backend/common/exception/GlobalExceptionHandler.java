@@ -141,7 +141,7 @@ public class GlobalExceptionHandler {
         String message = "Database error: Data integrity violation";
         String rootMsg = ex.getRootCause() != null ? ex.getRootCause().getMessage() : "";
 
-        if (rootMsg.contains("user_skills_user_id_skill_key")) {
+        if (rootMsg.contains("user_skills_user_id_skill_key") || rootMsg.contains("uk_user_skills_user_id_skill_name")) {
             message = "Duplicate skill not allowed";
         } else if (rootMsg.contains("uk_") || rootMsg.contains("unique constraint")) {
             message = "A record with this information already exists";
