@@ -7,6 +7,7 @@ public enum NotificationType {
     REFERRAL_ACCEPTED,          // seeker gets this when referrer accepts
     REFERRAL_REJECTED,          // seeker gets this when referrer rejects
     REFERRAL_WITHDRAWN,         // referrer gets this when seeker withdraws
+    REFERRAL,                   // generic event for direct connections
 
     // Chat
     NEW_MESSAGE,                // recipient gets this when a message arrives

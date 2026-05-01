@@ -17,6 +17,7 @@ import com.Reffr_Backend.module.referral.entity.ReferralRequest;
 import com.Reffr_Backend.module.referral.repository.ReferralRequestRepository;
 import com.Reffr_Backend.module.referral.service.ReferralService;
 import com.Reffr_Backend.module.notification.service.EmailService;
+import com.Reffr_Backend.module.user.entity.User;
 import com.Reffr_Backend.module.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -74,7 +75,7 @@ public class ReferralServiceImpl implements ReferralService {
                 .post(post)
                 .requester(userRepository.getReferenceById(requesterId))
                 .referrer(userRepository.getReferenceById(referrerId))
-                .status(ReferralStatus.PENDING)
+                .status(ReferralStatus.ACCEPTED)
                 .content(cleanMessage)
                 .build();
 
@@ -82,11 +83,20 @@ public class ReferralServiceImpl implements ReferralService {
         log.info("Referral created — post={} requester={} referrer={}",
                 postId, requesterId, referrerId);
 
+        // Instantly create chat
+        chatService.openChat(saved.getId(), currentUserId);
+
+        // Get current user's name for notification
+        User currentUser = userRepository.findById(currentUserId)
+                .orElseThrow(() -> new NotFoundException(ErrorCodes.USER_NOT_FOUND, "User not found"));
+
+        UUID postOwnerId = post.getAuthor().getId();
+
         notificationService.send(
-                referrerId,
-                NotificationType.REFERRAL_REQUEST_RECEIVED,
-                NotificationMessages.referralRequestTitle(),
-                NotificationMessages.referralRequestBody(post.getCurrentRole(), post.getCompany()),
+                postOwnerId,
+                NotificationType.REFERRAL,
+                "New connection",
+                currentUser.getName() + " connected with you",
                 "REFERRAL",
                 saved.getId().toString()
         );
@@ -102,6 +112,10 @@ public class ReferralServiceImpl implements ReferralService {
 
         if (!r.getReferrer().getId().equals(userId)) {
             throw new BusinessException(ErrorCodes.UNAUTHORIZED, "Only the referrer can accept this request");
+        }
+        if (r.getStatus() == ReferralStatus.ACCEPTED) {
+            log.info("Referral already accepted — id={}", referralId);
+            return;
         }
         if (r.getStatus() != ReferralStatus.PENDING) {
             throw new BusinessException(ErrorCodes.INVALID_STATE,
