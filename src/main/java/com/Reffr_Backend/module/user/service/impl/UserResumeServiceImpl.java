@@ -1,7 +1,6 @@
 package com.Reffr_Backend.module.user.service.impl;
 
 import com.Reffr_Backend.common.exception.ErrorCodes;
-import com.Reffr_Backend.common.exception.ForbiddenException;
 import com.Reffr_Backend.common.exception.NotFoundException;
 import com.Reffr_Backend.common.exception.UnauthorizedException;
 import com.Reffr_Backend.common.util.SecurityUtils;
@@ -110,6 +109,11 @@ public class UserResumeServiceImpl implements UserResumeService {
         if (currentUserId == null) {
             throw new UnauthorizedException(ErrorCodes.AUTH_REQUIRED, "User not authenticated");
         }
-        // Temporary: Allow all authenticated users to access resume
+        if (!targetUser.getId().equals(currentUserId)) {
+            throw new com.Reffr_Backend.common.exception.ForbiddenException(
+                    ErrorCodes.ACCESS_DENIED,
+                    "Direct username-based resume access is restricted"
+            );
+        }
     }
 }
