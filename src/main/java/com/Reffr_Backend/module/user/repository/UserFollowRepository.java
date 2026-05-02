@@ -18,4 +18,6 @@ public interface UserFollowRepository extends JpaRepository<UserFollow, UUID> {
 
     @Query("SELECT uf.follower.id FROM UserFollow uf WHERE uf.following.id = :followingId")
     List<UUID> findFollowerIdsByFollowingId(@Param("followingId") UUID followingId);
+
+    boolean existsByFollowerId(UUID followerId);
 }

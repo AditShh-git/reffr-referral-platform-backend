@@ -76,4 +76,24 @@ public interface UserRepository extends JpaRepository<User, UUID> {
         WHERE u.id = :referrerId
         """)
     void incrementSuccessfulReferrals(@Param("referrerId") UUID referrerId);
+
+    // ── Company match (for smart notifications) ──
+    /**
+     * Returns IDs of active users whose currentCompany matches the given tag.
+     * Returns IDs only to avoid loading full entities for potentially large result sets.
+     */
+    @Query("""
+        SELECT u.id FROM User u
+        WHERE u.active = true
+          AND LOWER(u.currentCompany) = LOWER(:company)
+        """)
+    java.util.List<UUID> findIdsByCurrentCompanyIgnoreCase(@Param("company") String company);
+
+    @Query("""
+        SELECT u FROM User u
+        WHERE u.active = true
+          AND u.successfulReferrals > 0
+        ORDER BY u.successfulReferrals DESC
+        """)
+    java.util.List<User> findTopReferrers(Pageable pageable);
 }
