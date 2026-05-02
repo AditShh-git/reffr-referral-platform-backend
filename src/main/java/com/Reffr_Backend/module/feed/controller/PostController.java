@@ -7,13 +7,11 @@ import com.Reffr_Backend.module.feed.dto.PostDto;
 import com.Reffr_Backend.module.feed.entity.Post;
 import com.Reffr_Backend.module.feed.service.PostService;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import com.Reffr_Backend.common.security.annotation.RequiresOnboarding;
-import org.springframework.data.domain.Page;
 import com.Reffr_Backend.common.util.PaginationUtils;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
@@ -31,21 +29,16 @@ public class PostController {
 
     private final PostService postService;
 
-    // ── Create ────────────────────────────────────────────────────────
-
     @PostMapping
     @SecurityRequirement(name = "bearerAuth")
     @Operation(summary = "Create a post",
             description = "SEEKER posts REQUEST (looking for referral). REFERRER posts OFFER (can refer).")
     public ResponseEntity<ApiResponse<PostDto.Response>> createPost(
             @Valid @RequestBody PostDto.CreateRequest request) {
-
         UUID userId = SecurityUtils.getCurrentUserId();
         PostDto.Response post = postService.createPost(request, userId);
         return ResponseEntity.status(201).body(ApiResponse.success("Post created", post));
     }
-
-    // ── Personalized Feed ─────────────────────────────────────────────
 
     @GetMapping("/personalized")
     @SecurityRequirement(name = "bearerAuth")
@@ -54,14 +47,27 @@ public class PostController {
     public ResponseEntity<ApiResponse<CursorPagedResponse<PostDto.FeedResponse>>> getPersonalizedFeed(
             @RequestParam(defaultValue = "0")  int page,
             @RequestParam(defaultValue = "20") int size) {
-
         Pageable pageable = PaginationUtils.of(page, size);
         return ResponseEntity.ok(ApiResponse.success(
                 postService.getPersonalizedFeed(pageable, SecurityUtils.getCurrentUserId())));
     }
 
-    // ── Consolidated Post Feed & Search ──────────────────────────────
-    
+    @GetMapping("/following")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(summary = "Following feed",
+            description = "Posts only from users the current user follows.")
+    public ResponseEntity<ApiResponse<CursorPagedResponse<PostDto.Response>>> getFollowingFeed(
+            @RequestParam(defaultValue = "0")  int page,
+            @RequestParam(defaultValue = "20") int size) {
+        UUID userId = SecurityUtils.getCurrentUserId();
+        Pageable pageable = PaginationUtils.of(page, size);
+        CursorPagedResponse<PostDto.Response> result = postService.getFollowingFeed(pageable, userId);
+        if (result.getItems().isEmpty()) {
+            return ResponseEntity.ok(ApiResponse.success("Follow users to personalize your feed", result));
+        }
+        return ResponseEntity.ok(ApiResponse.success(result));
+    }
+
     @GetMapping
     @Operation(summary = "Browse and search posts",
             description = "Consolidated API for feed, search, and filtering. Use sort=latest for cursor-based pagination, or sort=trending for offset-based pagination.")
@@ -73,9 +79,9 @@ public class PostController {
             @RequestParam(required = false) Integer minExp,
             @RequestParam(required = false) Integer maxExp,
             @RequestParam(required = false) Instant cursor,
+            @RequestParam(required = false) UUID cursorId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-
         PostDto.SearchFilters filters = PostDto.SearchFilters.builder()
                 .type(type)
                 .sort(sort)
@@ -84,44 +90,13 @@ public class PostController {
                 .minExp(minExp)
                 .maxExp(maxExp)
                 .cursor(cursor)
+                .cursorId(cursorId)
                 .build();
-
         Pageable pageable = PaginationUtils.of(page, size);
         CursorPagedResponse<PostDto.Response> result = postService.getPosts(
                 filters, pageable, tryGetCurrentUserId());
-                
         return ResponseEntity.ok(ApiResponse.success(result));
     }
-
-    // ── Backward Compatibility (Redirects) ────────────────────────────
-
-    @GetMapping("/offers")
-    @Operation(summary = "DEPRECATED: Use GET /api/v1/posts?type=OFFER")
-    public ResponseEntity<Void> redirectToOffers() {
-        return ResponseEntity.status(301)
-                .header("Location", "/api/v1/posts?type=OFFER")
-                .build();
-    }
-
-    @GetMapping("/requests")
-    @Operation(summary = "DEPRECATED: Use GET /api/v1/posts?type=REQUEST")
-    public ResponseEntity<Void> redirectToRequests() {
-        return ResponseEntity.status(301)
-                .header("Location", "/api/v1/posts?type=REQUEST")
-                .build();
-    }
-
-    @GetMapping("/search")
-    @Operation(summary = "DEPRECATED: Use GET /api/v1/posts with query params")
-    public ResponseEntity<Void> redirectToSearch(jakarta.servlet.http.HttpServletRequest request) {
-        String query = request.getQueryString();
-        String target = "/api/v1/posts" + (query != null ? "?" + query : "");
-        return ResponseEntity.status(301)
-                .header("Location", target)
-                .build();
-    }
-
-    // ── Single post ───────────────────────────────────────────────────
 
     @GetMapping("/{postId:[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}}")
     @Operation(summary = "Get a single post — increments view count")
@@ -130,37 +105,31 @@ public class PostController {
                 postService.getPost(postId, tryGetCurrentUserId())));
     }
 
-    // ── My posts ──────────────────────────────────────────────────────
-
     @GetMapping("/me")
     @SecurityRequirement(name = "bearerAuth")
     @Operation(summary = "My posts — management view (edit / delete)")
     public ResponseEntity<ApiResponse<CursorPagedResponse<PostDto.Response>>> getMyPosts(
             @RequestParam(required = false) Instant lastCreatedAt,
+            @RequestParam(required = false) UUID lastId,
             @RequestParam(defaultValue = "0")  int page,
             @RequestParam(defaultValue = "20") int size) {
-
         Pageable pageable = PaginationUtils.of(page, size);
         return ResponseEntity.ok(ApiResponse.success(
-                postService.getMyPosts(lastCreatedAt, pageable, SecurityUtils.getCurrentUserId())));
+                postService.getMyPosts(lastCreatedAt, lastId, pageable, SecurityUtils.getCurrentUserId())));
     }
-
-    // ── User posts (public) ───────────────────────────────────────────
 
     @GetMapping("/user/{authorId:[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}}")
     @Operation(summary = "Posts by user — public profile view")
     public ResponseEntity<ApiResponse<CursorPagedResponse<PostDto.Response>>> getUserPosts(
             @PathVariable UUID authorId,
             @RequestParam(required = false) Instant lastCreatedAt,
+            @RequestParam(required = false) UUID lastId,
             @RequestParam(defaultValue = "0")  int page,
             @RequestParam(defaultValue = "20") int size) {
-
         Pageable pageable = PaginationUtils.of(page, size);
         return ResponseEntity.ok(ApiResponse.success(
-                postService.getUserPosts(authorId, lastCreatedAt, pageable, tryGetCurrentUserId())));
+                postService.getUserPosts(authorId, lastCreatedAt, lastId, pageable, tryGetCurrentUserId())));
     }
-
-    // ── Update ────────────────────────────────────────────────────────
 
     @PutMapping("/{postId:[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}}")
     @SecurityRequirement(name = "bearerAuth")
@@ -168,13 +137,10 @@ public class PostController {
     public ResponseEntity<ApiResponse<PostDto.Response>> updatePost(
             @PathVariable UUID postId,
             @Valid @RequestBody PostDto.UpdateRequest request) {
-
         PostDto.Response updated = postService.updatePost(
                 postId, request, SecurityUtils.getCurrentUserId());
         return ResponseEntity.ok(ApiResponse.success("Post updated", updated));
     }
-
-    // ── Delete ────────────────────────────────────────────────────────
 
     @DeleteMapping("/{postId:[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}}")
     @SecurityRequirement(name = "bearerAuth")
@@ -184,12 +150,22 @@ public class PostController {
         return ResponseEntity.ok(ApiResponse.success("Post deleted", null));
     }
 
-    // ── Helper ────────────────────────────────────────────────────────
+    @PatchMapping("/{postId:[a-fA-F0-9-]{36}}/mark-fulfilled")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(summary = "Mark a post as fulfilled (owner only)")
+    public ResponseEntity<ApiResponse<Void>> markFulfilled(@PathVariable UUID postId) {
+        postService.markFulfilled(postId, SecurityUtils.getCurrentUserId());
+        return ResponseEntity.ok(ApiResponse.success("Post marked as fulfilled ✓", null));
+    }
 
-    /**
-     * Returns current userId if logged in, null if unauthenticated.
-     * Feeds are public — auth is optional, but isOwner flag needs userId when available.
-     */
+    @PatchMapping("/{postId:[a-fA-F0-9-]{36}}/close")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(summary = "Manually close a post (owner only)")
+    public ResponseEntity<ApiResponse<Void>> closePost(@PathVariable UUID postId) {
+        postService.closePost(postId, SecurityUtils.getCurrentUserId());
+        return ResponseEntity.ok(ApiResponse.success("Post closed", null));
+    }
+
     private UUID tryGetCurrentUserId() {
         try {
             return SecurityUtils.getCurrentUserId();

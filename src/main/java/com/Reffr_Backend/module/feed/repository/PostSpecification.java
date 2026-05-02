@@ -1,6 +1,7 @@
 package com.Reffr_Backend.module.feed.repository;
 
 import com.Reffr_Backend.module.feed.entity.Post;
+import com.Reffr_Backend.module.feed.entity.PostStatus;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.util.StringUtils;
@@ -22,8 +23,9 @@ public class PostSpecification {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
-            // Always filter by active and not expired
+            // Always filter by active, OPEN status, and not expired
             predicates.add(cb.isTrue(root.get("active")));
+            predicates.add(cb.equal(root.get("status"), PostStatus.OPEN));
             
             predicates.add(cb.or(
                     cb.isNull(root.get("expiresAt")),

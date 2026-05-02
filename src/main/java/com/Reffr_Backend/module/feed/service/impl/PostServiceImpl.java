@@ -7,6 +7,7 @@ import com.Reffr_Backend.common.exception.NotFoundException;
 import com.Reffr_Backend.common.security.annotation.Idempotent;
 import com.Reffr_Backend.common.util.NotificationMessages;
 import com.Reffr_Backend.common.util.SanitizerUtils;
+import com.Reffr_Backend.config.AppProperties;
 import com.Reffr_Backend.module.feed.dto.PostDto;
 import com.Reffr_Backend.module.feed.entity.Post;
 import com.Reffr_Backend.module.feed.entity.PostTag;
@@ -17,6 +18,7 @@ import com.Reffr_Backend.module.feed.service.PostService;
 import com.Reffr_Backend.module.notification.entity.NotificationType;
 import com.Reffr_Backend.module.notification.service.NotificationService;
 import com.Reffr_Backend.module.user.entity.User;
+import com.Reffr_Backend.module.user.infrastructure.ResumeSnapshotService;
 import com.Reffr_Backend.module.user.repository.UserFollowRepository;
 import com.Reffr_Backend.module.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +27,7 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -43,6 +46,9 @@ public class PostServiceImpl implements PostService {
     private final PostEligibilityService postEligibilityService;
     private final UserFollowRepository userFollowRepository;
     private final NotificationService notificationService;
+    private final AppProperties appProperties;
+    private final StringRedisTemplate redisTemplate;
+    private final ResumeSnapshotService resumeSnapshotService;
 
     @Override
     @Transactional
@@ -59,15 +65,28 @@ public class PostServiceImpl implements PostService {
             throw new BusinessException(ErrorCodes.INVALID_REQUEST, "Maximum experience cannot be less than minimum experience");
         }
 
+        String resumeKey = null;
+        if (request.getType() == Post.PostType.REQUEST && user.hasResume()) {
+            resumeKey = user.getResumeS3Key();
+        }
+
         Post post = Post.builder()
                 .author(user)
                 .type(request.getType())
+                .title(SanitizerUtils.sanitize(request.getTitle()))
                 .content(SanitizerUtils.sanitize(request.getContent()))
                 .company(SanitizerUtils.sanitize(request.getCompany()))
                 .currentRole(SanitizerUtils.sanitize(request.getCurrentRole()))
                 .location(SanitizerUtils.sanitize(request.getLocation()))
                 .minExperience(request.getMinExperience())
                 .maxExperience(request.getMaxExperience())
+                .githubLink(SanitizerUtils.sanitize(request.getGithubLink()))
+                .linkedinLink(SanitizerUtils.sanitize(request.getLinkedinLink()))
+                .resumeVisibility(request.getResumeVisibility() != null
+                        ? request.getResumeVisibility()
+                        : com.Reffr_Backend.module.feed.entity.PostVisibility.PUBLIC)
+                .resumeSnapshotKey(resumeKey)
+                .urgencyDeadline(request.getUrgencyDeadline())
                 .build();
 
         if (request.getTags() != null) {
@@ -80,12 +99,13 @@ public class PostServiceImpl implements PostService {
 
         Post saved = postRepository.save(post);
         notifyFollowersAboutNewPost(saved);
+        notifyCompanyMatchUsers(saved);
 
-        log.info("Post created - id={} user={}",
-                saved.getId(),
+        log.info("Post created - id={} type={} user={}",
+                saved.getId(), saved.getType(),
                 user.getGithubUsername() != null ? user.getGithubUsername() : "unknown");
 
-        return PostDto.Response.from(saved, userId);
+        return resolveResponse(saved, userId, true);
     }
 
     @Override
@@ -95,18 +115,17 @@ public class PostServiceImpl implements PostService {
                 .orElseThrow(() -> new NotFoundException(ErrorCodes.POST_NOT_FOUND, "Post not found"));
 
         postRepository.incrementViews(postId);
-        return PostDto.Response.from(post, currentUserId);
+        boolean viewerVerified = isViewerVerified(currentUserId);
+        return resolveResponse(post, currentUserId, viewerVerified);
     }
 
     @Override
     @Transactional(readOnly = true)
     public CursorPagedResponse<PostDto.Response> getPosts(PostDto.SearchFilters filters, Pageable pageable, UUID currentUserId) {
-        // Hybrid logic: Latest -> Cursor, Trending -> Offset (Spec)
         if ("trending".equalsIgnoreCase(filters.getSort())) {
             return getTrendingPosts(filters, pageable, currentUserId);
         }
         
-        // Latest sort logic
         if (isSimpleFilter(filters)) {
             return getLatestPostsSimple(filters, pageable, currentUserId);
         } else {
@@ -125,24 +144,26 @@ public class PostServiceImpl implements PostService {
     private CursorPagedResponse<PostDto.Response> getLatestPostsSimple(PostDto.SearchFilters filters, Pageable pageable, UUID userId) {
         Page<Post> posts;
         Instant cursor = filters.getCursor();
+        UUID cursorId = filters.getCursorId();
         Post.PostType type = filters.getType();
 
         if (type == null) {
-            posts = (cursor == null) ? postRepository.findFeedFirst(pageable) : postRepository.findFeedNext(cursor, pageable);
+            posts = (cursor == null || cursorId == null)
+                    ? postRepository.findFeedFirst(pageable)
+                    : postRepository.findFeedNext(cursor, cursorId, pageable);
         } else {
-            posts = (cursor == null) ? postRepository.findFeedByTypeFirst(type, pageable) : postRepository.findFeedByTypeNext(type, cursor, pageable);
+            posts = (cursor == null || cursorId == null)
+                    ? postRepository.findFeedByTypeFirst(type, pageable)
+                    : postRepository.findFeedByTypeNext(type, cursor, cursorId, pageable);
         }
         return buildCursorResponse(posts, userId);
     }
 
     private CursorPagedResponse<PostDto.Response> getLatestPostsWithSpec(PostDto.SearchFilters filters, Pageable pageable, UUID userId) {
-        // Even with latest sort, if complex filters are present, use Spec
-        // Note: Specification search is offset-based as per design choice
         org.springframework.data.jpa.domain.Specification<Post> spec = PostSpecification.filterBy(
                 filters.getType(), filters.getCompany(), filters.getRole(), filters.getMinExp(), filters.getMaxExp(), filters.getAuthorId()
         );
         
-        // Ensure latest sort if not already in pageable
         Pageable sortedPageable = pageable;
         if (pageable.getSort().isUnsorted()) {
             sortedPageable = org.springframework.data.domain.PageRequest.of(
@@ -153,25 +174,10 @@ public class PostServiceImpl implements PostService {
         }
 
         Page<Post> posts = postRepository.findAll(spec, sortedPageable);
-        return buildCursorResponse(posts, userId); // buildCursorResponse works for both cursor and offset pages
+        return buildCursorResponse(posts, userId);
     }
 
     private CursorPagedResponse<PostDto.Response> getTrendingPosts(PostDto.SearchFilters filters, Pageable pageable, UUID userId) {
-        org.springframework.data.jpa.domain.Specification<Post> spec = PostSpecification.filterBy(
-                filters.getType(), filters.getCompany(), filters.getRole(), filters.getMinExp(), filters.getMaxExp(), filters.getAuthorId()
-        );
-
-        // Custom trending sort
-        org.springframework.data.domain.Sort trendingSort = org.springframework.data.domain.Sort.unsorted();
-        // Since score is calculated, we can't easily use Sort.by().
-        // However, we already have a custom query for trending in the old repo.
-        // But the user wants Specification.
-        // Let's use a workaround: custom sort in Pageable if supported, or stick to repo query for trending.
-        // User said: "Trending -> offset pagination" and "Search -> specification".
-        // Let's try to combine. 
-        // Actually, Specification with custom order by formula is hard in Spring Data JPA without extra effort.
-        // I'll use the repository query for trending but update it to be cleaner.
-        
         Page<Post> posts = postRepository.searchByTypeTrending(
             filters.getType(), 
             normalizeTextFilter(filters.getCompany()), 
@@ -180,7 +186,6 @@ public class PostServiceImpl implements PostService {
             filters.getMaxExp(), 
             pageable
         );
-        
         return buildCursorResponse(posts, userId);
     }
 
@@ -212,39 +217,45 @@ public class PostServiceImpl implements PostService {
                 })
                 .toList();
 
-        return new CursorPagedResponse<>(dtoList, null, posts.hasNext());
+        return new CursorPagedResponse<>(dtoList, null, null, posts.hasNext());
     }
 
     @Override
     @Transactional(readOnly = true)
-    public CursorPagedResponse<PostDto.Response> getMyPosts(Instant lastCreatedAt, Pageable pageable, UUID userId) {
-        Page<Post> posts;
+    public CursorPagedResponse<PostDto.Response> getFollowingFeed(Pageable pageable, UUID userId) {
+        if (!userFollowRepository.existsByFollowerId(userId)) {
+            return new CursorPagedResponse<>(List.of(), null, null, false);
+        }
+        Page<Post> posts = postRepository.findByFollowedUsers(userId, pageable);
+        return buildCursorResponse(posts, userId);
+    }
 
-        if (lastCreatedAt == null) {
+    @Override
+    @Transactional(readOnly = true)
+    public CursorPagedResponse<PostDto.Response> getMyPosts(Instant lastCreatedAt, UUID lastId, Pageable pageable, UUID userId) {
+        Page<Post> posts;
+        if (lastCreatedAt == null || lastId == null) {
             posts = postRepository.findByAuthorFirst(userId, pageable);
         } else {
-            posts = postRepository.findByAuthorNext(userId, lastCreatedAt, pageable);
+            posts = postRepository.findByAuthorNext(userId, lastCreatedAt, lastId, pageable);
         }
         return buildCursorResponse(posts, userId);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public CursorPagedResponse<PostDto.Response> getUserPosts(UUID authorId, Instant lastCreatedAt, Pageable pageable, UUID currentUserId) {
+    public CursorPagedResponse<PostDto.Response> getUserPosts(UUID authorId, Instant lastCreatedAt, UUID lastId, Pageable pageable, UUID currentUserId) {
         if (!userRepository.existsById(authorId)) {
             throw new NotFoundException(ErrorCodes.USER_NOT_FOUND, "User not found");
         }
-
         Page<Post> posts;
-
-        if (lastCreatedAt == null) {
+        if (lastCreatedAt == null || lastId == null) {
             posts = postRepository.findByAuthorFirst(authorId, pageable);
         } else {
-            posts = postRepository.findByAuthorNext(authorId, lastCreatedAt, pageable);
+            posts = postRepository.findByAuthorNext(authorId, lastCreatedAt, lastId, pageable);
         }
         return buildCursorResponse(posts, currentUserId);
     }
-
 
     @Override
     @Transactional
@@ -257,11 +268,15 @@ public class PostServiceImpl implements PostService {
             throw new BusinessException(ErrorCodes.POST_EDIT_DENIED, "You can only edit your own posts");
         }
 
-        if (StringUtils.hasText(request.getContent())) post.setContent(request.getContent().trim());
-        if (StringUtils.hasText(request.getCompany())) post.setCompany(request.getCompany().trim());
+        if (StringUtils.hasText(request.getTitle()))       post.setTitle(request.getTitle().trim());
+        if (StringUtils.hasText(request.getContent()))     post.setContent(request.getContent().trim());
+        if (StringUtils.hasText(request.getCompany()))     post.setCompany(request.getCompany().trim());
         if (StringUtils.hasText(request.getCurrentRole())) post.setCurrentRole(request.getCurrentRole().trim());
-        if (StringUtils.hasText(request.getLocation())) post.setLocation(request.getLocation().trim());
-
+        if (StringUtils.hasText(request.getLocation()))    post.setLocation(request.getLocation().trim());
+        if (StringUtils.hasText(request.getGithubLink()))  post.setGithubLink(request.getGithubLink().trim());
+        if (StringUtils.hasText(request.getLinkedinLink())) post.setLinkedinLink(request.getLinkedinLink().trim());
+        if (request.getResumeVisibility() != null)  post.setResumeVisibility(request.getResumeVisibility());
+        if (request.getUrgencyDeadline() != null)   post.setUrgencyDeadline(request.getUrgencyDeadline());
         if (request.getMinExperience() != null) post.setMinExperience(request.getMinExperience());
         if (request.getMaxExperience() != null) post.setMaxExperience(request.getMaxExperience());
 
@@ -281,7 +296,7 @@ public class PostServiceImpl implements PostService {
 
         Post saved = postRepository.save(post);
         log.info("Post updated - id={} user={}", postId, userId);
-        return PostDto.Response.from(saved, userId);
+        return resolveResponse(saved, userId, true);
     }
 
     @Override
@@ -290,59 +305,103 @@ public class PostServiceImpl implements PostService {
     public void deletePost(UUID postId, UUID userId) {
         Post post = postRepository.findActiveById(postId)
                 .orElseThrow(() -> new NotFoundException(ErrorCodes.POST_NOT_FOUND, "Post not found"));
-
         if (!post.isOwnedBy(userId)) {
             throw new BusinessException(ErrorCodes.POST_DELETE_DENIED, "You can only delete your own posts");
         }
-
         postRepository.softDelete(postId);
         log.info("Post deleted - id={} user={}", postId, userId);
     }
 
-    private String emptyToNull(String s) {
-        return StringUtils.hasText(s) ? s : null;
+    private PostDto.Response resolveResponse(Post post, UUID viewerId, boolean viewerVerified) {
+        String resumeUrl = null;
+        if (post.getType() == Post.PostType.REQUEST && post.getResumeSnapshotKey() != null) {
+            resumeUrl = "/api/v1/resumes/" + post.getId();
+        }
+        return PostDto.Response.from(post, viewerId, viewerVerified, resumeUrl);
+    }
+
+    private boolean isViewerVerified(UUID viewerId) {
+        if (viewerId == null) return false;
+        return userRepository.findById(viewerId)
+                .map(com.Reffr_Backend.module.user.entity.User::isVerified)
+                .orElse(false);
     }
 
     private String normalizeTextFilter(String value) {
         return value == null ? "" : value.trim();
     }
 
-
     private CursorPagedResponse<PostDto.Response> buildCursorResponse(Page<Post> posts, UUID userId) {
+        boolean viewerVerified = isViewerVerified(userId);
         List<PostDto.Response> dtoList = posts.stream()
-                .map(p -> PostDto.Response.from(p, userId))
+                .map(p -> resolveResponse(p, userId, viewerVerified))
                 .toList();
 
         Instant nextCursor = null;
+        UUID nextCursorId = null;
         if (!posts.isEmpty() && posts.hasNext()) {
-            nextCursor = posts.getContent().get(posts.getContent().size() - 1).getCreatedAt();
+            Post lastPost = posts.getContent().get(posts.getContent().size() - 1);
+            nextCursor = lastPost.getCreatedAt();
+            nextCursorId = lastPost.getId();
         }
-
-        return new CursorPagedResponse<>(dtoList, nextCursor, posts.hasNext());
+        return new CursorPagedResponse<>(dtoList, nextCursor, nextCursorId, posts.hasNext());
     }
 
     private void notifyFollowersAboutNewPost(Post post) {
         UUID authorId = post.getAuthor().getId();
         List<UUID> followerIds = userFollowRepository.findFollowerIdsByFollowingId(authorId);
-
-        if (followerIds.isEmpty()) {
-            return;
-        }
-
         String authorName = post.getAuthor().getName();
         for (UUID followerId : followerIds) {
-            if (authorId.equals(followerId)) {
-                continue;
-            }
-
-            notificationService.send(
-                    followerId,
-                    NotificationType.NEW_POST,
-                    NotificationMessages.newPostTitle(),
-                    NotificationMessages.newPostBody(authorName),
-                    "POST",
-                    post.getId().toString()
-            );
+            if (authorId.equals(followerId)) continue;
+            notificationService.send(followerId, NotificationType.NEW_POST, NotificationMessages.newPostTitle(), NotificationMessages.newPostBody(authorName), "POST", post.getId().toString());
         }
+    }
+
+    private void notifyCompanyMatchUsers(Post post) {
+        if (post.getType() != Post.PostType.REQUEST) return;
+        if (post.getTags() == null || post.getTags().isEmpty()) return;
+
+        UUID authorId = post.getAuthor().getId();
+        int maxPerDay = appProperties.getNotification().getCompanyMatchPerUserPerDay();
+        String today  = java.time.LocalDate.now().toString();
+
+        post.getTags().stream()
+                .map(t -> t.getTag())
+                .distinct()
+                .forEach(tag -> {
+                    List<UUID> employeeIds = userRepository.findIdsByCurrentCompanyIgnoreCase(tag);
+                    for (UUID employeeId : employeeIds) {
+                        if (authorId.equals(employeeId)) continue;
+                        String redisKey = "company_notif:" + employeeId + ":" + tag + ":" + today;
+                        Long count = redisTemplate.opsForValue().increment(redisKey);
+                        if (count == 1) redisTemplate.expire(redisKey, java.time.Duration.ofDays(1));
+                        if (count > maxPerDay) continue;
+                        notificationService.send(employeeId, NotificationType.COMPANY_MATCH, NotificationMessages.companyMatchTitle(tag), NotificationMessages.companyMatchBody(tag, post.getCurrentRole()), "POST", post.getId().toString());
+                    }
+                });
+    }
+
+    @Override
+    @Transactional
+    public void markFulfilled(UUID postId, UUID userId) {
+        Post post = postRepository.findActiveById(postId)
+                .orElseThrow(() -> new NotFoundException(ErrorCodes.POST_NOT_FOUND, "Post not found"));
+        if (!post.isOwnedBy(userId)) {
+            throw new BusinessException(ErrorCodes.POST_EDIT_DENIED, "Only the post author can mark it fulfilled");
+        }
+        post.markFulfilled();
+        postRepository.save(post);
+    }
+
+    @Override
+    @Transactional
+    public void closePost(UUID postId, UUID userId) {
+        Post post = postRepository.findActiveById(postId)
+                .orElseThrow(() -> new NotFoundException(ErrorCodes.POST_NOT_FOUND, "Post not found"));
+        if (!post.isOwnedBy(userId)) {
+            throw new BusinessException(ErrorCodes.POST_EDIT_DENIED, "Only the post author can close this post");
+        }
+        post.close();
+        postRepository.save(post);
     }
 }

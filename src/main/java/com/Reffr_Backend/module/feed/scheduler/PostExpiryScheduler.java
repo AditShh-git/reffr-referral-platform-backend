@@ -21,11 +21,11 @@ public class PostExpiryScheduler {
     public void runPostExpiry() {
         log.info("Running post expiry scheduler...");
         try {
-            int updatedCount = postRepository.deactivateExpiredPosts();
+            int updatedCount = postRepository.expireOpenPosts();
             if (updatedCount > 0) {
-                log.info("Successfully deactivated {} expired posts.", updatedCount);
+                log.info("Successfully marked {} posts as EXPIRED.", updatedCount);
             } else {
-                log.info("No expired posts found to deactivate.");
+                log.info("No expired posts found to update.");
             }
         } catch (Exception e) {
             log.error("Failed to execute post expiry scheduler", e);
