@@ -11,12 +11,9 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
-import org.springframework.web.util.UriComponentsBuilder;
-
 
 import java.io.IOException;
 import java.util.UUID;
-
 
 @Slf4j
 @Component
@@ -42,18 +39,12 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
 
         AuthDto.TokenResponse tokens = authService.issueTokens(principal, deviceId);
 
-        //  secure redirect using fragment
         String redirectUrl = frontendUrl + "/auth/callback#"
                 + "access_token=" + tokens.getAccessToken()
                 + "&refresh_token=" + tokens.getRefreshToken()
                 + "&device_id=" + deviceId;
 
-        log.info("====================================");
-        log.info("ACCESS TOKEN: {}", tokens.getAccessToken());
-        log.info("REFRESH TOKEN: {}", tokens.getRefreshToken());
-        log.info("====================================");
-
-        log.info("OAuth2 success — redirecting user: {}", principal.getGithubUsername());
+        log.info("OAuth2 success - redirecting user: {}", principal.getGithubUsername());
         getRedirectStrategy().sendRedirect(request, response, redirectUrl);
     }
 }

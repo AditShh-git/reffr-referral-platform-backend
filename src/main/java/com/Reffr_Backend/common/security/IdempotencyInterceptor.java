@@ -45,7 +45,11 @@ public class IdempotencyInterceptor implements HandlerInterceptor {
             userId = UUID.fromString("00000000-0000-0000-0000-000000000000"); // Anonymous
         }
 
-        String cacheKey = IDEMPOTENCY_PREFIX + userId + ":" + key;
+        String cacheKey = IDEMPOTENCY_PREFIX
+                + userId + ":"
+                + request.getMethod() + ":"
+                + request.getRequestURI() + ":"
+                + key;
         
         Boolean success = redisTemplate.opsForValue().setIfAbsent(cacheKey, "PROCESSING", 
                 annotation.ttlInSeconds(), TimeUnit.SECONDS);

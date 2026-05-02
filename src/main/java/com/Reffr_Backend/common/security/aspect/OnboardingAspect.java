@@ -33,6 +33,7 @@ public class OnboardingAspect {
             path.equals("/api/v1/users/me/company/verify") ||
             path.equals("/api/v1/users/me/company/public") ||
             path.equals("/api/v1/users/me/company/document") ||
+            path.equals("/api/v1/users/me/company/document-upload") ||
             path.equals("/api/v1/users/me/experience")) {
             return;
         }

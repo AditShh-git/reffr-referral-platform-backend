@@ -3,24 +3,20 @@ package com.Reffr_Backend.module.auth.security;
 import com.Reffr_Backend.common.constants.SecurityConstants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-/**
- * Fix 5: Multi-device session support.
- *
- * Key structure:
- *   session:{userId}:{deviceId}  → refreshToken   (one per device)
- *   denylist:{tokenHash}         → "revoked"      (short-lived, until token expiry)
- *
- * A user can have N concurrent sessions (phone, laptop, work machine).
- * Logging out on one device only revokes that device's token.
- */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -32,8 +28,7 @@ public class RedisTokenStore implements TokenStore {
 
     @Override
     public void saveRefreshToken(UUID userId, String deviceId, String token) {
-        String key = sessionKey(userId, deviceId);
-        redisTemplate.opsForValue().set(key, token, REFRESH_TTL);
+        redisTemplate.opsForValue().set(sessionKey(userId, deviceId), token, REFRESH_TTL);
         log.debug("Saved refresh token for user={} device={}", userId, deviceId);
     }
 
@@ -51,10 +46,8 @@ public class RedisTokenStore implements TokenStore {
 
     @Override
     public void deleteAllRefreshTokens(UUID userId) {
-        // Scan all sessions for this user and delete them
-        String pattern = SecurityConstants.REFRESH_TOKEN_PREFIX + userId + ":*";
-        Set<String> keys = redisTemplate.keys(pattern);
-        if (keys != null && !keys.isEmpty()) {
+        Set<String> keys = scanKeys(SecurityConstants.REFRESH_TOKEN_PREFIX + userId + ":*");
+        if (!keys.isEmpty()) {
             redisTemplate.delete(keys);
             log.info("Revoked {} sessions for user={}", keys.size(), userId);
         }
@@ -62,42 +55,64 @@ public class RedisTokenStore implements TokenStore {
 
     @Override
     public Set<String> getActiveDeviceIds(UUID userId) {
-        String pattern = SecurityConstants.REFRESH_TOKEN_PREFIX + userId + ":*";
-        Set<String> keys = redisTemplate.keys(pattern);
-        if (keys == null || keys.isEmpty()) return Set.of();
+        Set<String> keys = scanKeys(SecurityConstants.REFRESH_TOKEN_PREFIX + userId + ":*");
+        if (keys.isEmpty()) {
+            return Set.of();
+        }
 
-        // Extract deviceId from "session:{userId}:{deviceId}"
         String prefix = SecurityConstants.REFRESH_TOKEN_PREFIX + userId + ":";
         return keys.stream()
-                .map(k -> k.substring(prefix.length()))
+                .map(key -> key.substring(prefix.length()))
                 .collect(Collectors.toSet());
     }
 
     @Override
     public void denylistToken(String token, long ttlMillis) {
-        if (ttlMillis <= 0) return;
-        String key = SecurityConstants.TOKEN_DENYLIST_PREFIX + tokenHash(token);
-        redisTemplate.opsForValue().set(key, "revoked", Duration.ofMillis(ttlMillis));
+        if (ttlMillis <= 0) {
+            return;
+        }
+        redisTemplate.opsForValue().set(
+                SecurityConstants.TOKEN_DENYLIST_PREFIX + tokenHash(token),
+                "revoked",
+                Duration.ofMillis(ttlMillis)
+        );
     }
 
     @Override
     public boolean isDenylisted(String token) {
         return Boolean.TRUE.equals(
-                redisTemplate.hasKey(SecurityConstants.TOKEN_DENYLIST_PREFIX + tokenHash(token)));
+                redisTemplate.hasKey(SecurityConstants.TOKEN_DENYLIST_PREFIX + tokenHash(token))
+        );
     }
-
-    // ── Helpers ───────────────────────────────────────────────────────
 
     private String sessionKey(UUID userId, String deviceId) {
         return SecurityConstants.REFRESH_TOKEN_PREFIX + userId + ":" + deviceId;
     }
 
-    /**
-     * Hash the token before storing as key — avoids leaking full JWTs into Redis keyspace.
-     * Uses last 16 chars which are sufficiently unique for denylist purposes.
-     */
+    private Set<String> scanKeys(String pattern) {
+        Set<String> keys = new HashSet<>();
+        try (Cursor<String> cursor = redisTemplate.scan(
+                ScanOptions.scanOptions().match(pattern).count(500).build())) {
+            while (cursor.hasNext()) {
+                keys.add(cursor.next());
+            }
+        } catch (Exception ex) {
+            log.warn("Redis SCAN failed for pattern={}: {}", pattern, ex.getMessage());
+        }
+        return keys;
+    }
+
     private String tokenHash(String token) {
-        int len = token.length();
-        return len > 16 ? token.substring(len - 16) : token;
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(token.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder(digest.length * 2);
+            for (byte b : digest) {
+                hex.append(String.format("%02x", b));
+            }
+            return hex.toString();
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 not available", ex);
+        }
     }
 }

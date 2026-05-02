@@ -21,7 +21,7 @@ import java.time.LocalDateTime;
 public class IdempotencyRecord {
 
     @Id
-    @Column(length = 100, nullable = false)
+    @Column(length = 512, nullable = false)
     private String idempotencyKey;
 
     @Column(nullable = false)

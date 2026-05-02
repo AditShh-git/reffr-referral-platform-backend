@@ -41,6 +41,25 @@ public final class NotificationMessages {
         return requesterName + " withdrew their referral request";
     }
 
+    public static String referralVolunteerTitle() {
+        return "Someone offered to refer you 👋";
+    }
+
+    public static String referralVolunteerBody(String referrerName) {
+        return referrerName + " volunteered to refer you — review their profile";
+    }
+
+    public static String companyMatchTitle(String company) {
+        return "💼 Someone is looking for a referral at " + company;
+    }
+
+    public static String companyMatchBody(String company, String role) {
+        if (role != null && !role.isBlank()) {
+            return "A candidate is seeking a " + role + " referral at " + company + ". You might be able to help!";
+        }
+        return "A candidate is seeking a referral at " + company + ". You might be able to help!";
+    }
+
     // ── Chat ──────────────────────────────────────────────────────────
 
     public static String newMessageTitle(String senderName) {

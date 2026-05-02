@@ -39,6 +39,14 @@ public final class ErrorCodes {
     public static final String INVALID_STATE        = "INVALID_STATE";
     public static final String FEEDBACK_NOT_ALLOWED = "FEEDBACK_NOT_ALLOWED";
     public static final String DUPLICATE_FEEDBACK   = "DUPLICATE_FEEDBACK";
+    public static final String REFERRAL_EXPIRED     = "REFERRAL_EXPIRED";
+
+    // ── Posts / Feed (extended) ──────────────────────────────────────────
+    public static final String POST_CLOSED           = "POST_CLOSED";
+    public static final String MAX_VOLUNTEERS_REACHED = "MAX_VOLUNTEERS_REACHED";
+    public static final String MAX_APPLICANTS_REACHED = "MAX_APPLICANTS_REACHED";
+    public static final String POST_QUESTION_NOT_FOUND = "POST_QUESTION_NOT_FOUND";
+    public static final String CANNOT_ASK_OWN_POST   = "CANNOT_ASK_OWN_POST";
 
     // ── Chat ──────────────────────────────────────────────────────────
     public static final String CHAT_NOT_FOUND       = "CHAT_NOT_FOUND";

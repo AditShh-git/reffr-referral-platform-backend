@@ -16,6 +16,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.util.matcher.RegexRequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -28,75 +29,54 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-    private final JwtAuthenticationFilter jwtAuthenticationFilter;
-    private final OAuth2UserService       oAuth2UserService;
-    private final OAuth2SuccessHandler    oAuth2SuccessHandler;
-
-    @Value("${reffr.frontend-url}")
-    private String frontendUrl;
-
-    // ── Publicly accessible endpoints ─────────────────────────────────
-    private static final String[] PUBLIC_GET = {
-            // Users
-            "/api/v1/users/{username}",
-            "/api/v1/users/search",
-            "/api/v1/users/referrers",
-
-            // Feed (IMPORTANT)
-            "/api/v1/posts",
-            "/api/v1/posts/**",
-
-            // Docs
-            "/api-docs/**",
-            "/swagger-ui/**",
-            "/swagger-ui.html",
-            "/actuator/health",
-    };
-
     private static final String[] PUBLIC_ANY = {
             "/api/v1/auth/**",
             "/oauth2/**",
             "/login/oauth2/**",
+            "/actuator/health",
+            "/actuator/info",
+            "/actuator/prometheus"
     };
+
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final OAuth2UserService oAuth2UserService;
+    private final OAuth2SuccessHandler oAuth2SuccessHandler;
+
+    @Value("${reffr.frontend-url}")
+    private String frontendUrl;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-                // Stateless API — no sessions, no CSRF needed
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(PUBLIC_ANY).permitAll()
-                        .requestMatchers(HttpMethod.GET, PUBLIC_GET).permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/posts").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/users/search").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/actuator/health").permitAll()
+                        .requestMatchers(new RegexRequestMatcher("/api/v1/posts/[0-9a-fA-F\\-]{36}", HttpMethod.GET.name())).permitAll()
+                        .requestMatchers(new RegexRequestMatcher("/api/v1/users/(?!search$|me$|referrers$)[^/]+", HttpMethod.GET.name())).permitAll()
+                        .requestMatchers(new RegexRequestMatcher("/api/v1/resumes/[0-9a-fA-F\\-]{36}", HttpMethod.GET.name())).permitAll()
                         .anyRequest().authenticated()
                 )
-
-                .exceptionHandling(ex -> ex
-                        .authenticationEntryPoint((request, response, authException) -> {
-                            response.setContentType("application/json");
-                            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-
-                            response.getWriter().write("""
+                .exceptionHandling(ex -> ex.authenticationEntryPoint((request, response, authException) -> {
+                    response.setContentType("application/json");
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    response.getWriter().write("""
                 {
                     "success": false,
                     "message": "Please login to continue",
                     "status": 401
                 }
                 """);
-                        })
-                )
-
-                // GitHub OAuth2
+                }))
                 .oauth2Login(oauth -> oauth
                         .userInfoEndpoint(ui -> ui.userService(oAuth2UserService))
                         .successHandler(oAuth2SuccessHandler)
                 )
-
-                // JWT filter runs before Spring's auth filter
-                .addFilterBefore(jwtAuthenticationFilter,
-                        UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
