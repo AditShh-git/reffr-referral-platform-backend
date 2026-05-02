@@ -132,6 +132,20 @@ aws:
 reffr:
   frontend-url: ${FRONTEND_URL:http://localhost:3000}
 
+# ── Business Rules ─────────────────────────────────────────────────────
+app:
+  referral:
+    daily-limit: 5              # max referral requests a user can create per day
+    expiry-days: 7              # days before PENDING referral becomes EXPIRED
+    max-volunteers: 10          # max volunteers on a REQUEST post before it's FULL
+    max-applicants: 20          # max applicants on an OFFER post before it's FULL
+  post:
+    daily-limit: 3              # max posts a user can create per day
+  chat:
+    inactive-after-days: 14     # days of silence before chat is marked INACTIVE
+  notification:
+    company-match-per-user-per-day: 3   # max COMPANY_MATCH notifs per user per company per day
+
 # ── Swagger ───────────────────────────────────────────────────────────
 springdoc:
   api-docs:
@@ -148,10 +162,20 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
   endpoint:
     health:
       show-details: when-authorized
+    prometheus:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http:
+          server:
+            requests: true
 
 # ── Logging ───────────────────────────────────────────────────────────
 logging:
