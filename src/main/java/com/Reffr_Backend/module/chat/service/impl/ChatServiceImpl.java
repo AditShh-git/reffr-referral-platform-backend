@@ -120,7 +120,7 @@ public class ChatServiceImpl implements ChatService {
                 nextCursor = next.toInstant(ZoneOffset.UTC);
             }
         }
-        return new CursorPagedResponse<>(dtoList, nextCursor, chats.hasNext());
+        return new CursorPagedResponse<>(dtoList, nextCursor, null, chats.hasNext());
     }
 
     // ── MESSAGES ──────────────────────────────────────────────────────
@@ -150,7 +150,7 @@ public class ChatServiceImpl implements ChatService {
                 nextCursor = next.toInstant(ZoneOffset.UTC);
             }
         }
-        return new CursorPagedResponse<>(dtoList, nextCursor, messages.hasNext());
+        return new CursorPagedResponse<>(dtoList, nextCursor, null, messages.hasNext());
     }
 
     // ── SEND MESSAGE ──────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 package com.Reffr_Backend.module.chat.websocket;
 
+import com.Reffr_Backend.common.constants.TokenType;
 import com.Reffr_Backend.module.auth.security.JwtProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,23 +31,20 @@ public class StompAuthInterceptor implements ChannelInterceptor {
 
         if (accessor == null) return message;
 
-        // Only validate on CONNECT — subsequent frames inherit the session principal
         if (StompCommand.CONNECT.equals(accessor.getCommand())) {
             String token = extractToken(accessor);
 
             if (token == null || !jwtProvider.validateToken(token)) {
-                log.warn("WebSocket CONNECT rejected — invalid or missing JWT");
+                log.warn("WebSocket CONNECT rejected - invalid or missing JWT");
                 throw new IllegalArgumentException("Invalid JWT token");
             }
 
-            if ("REFRESH".equals(jwtProvider.getTokenType(token))) {
-                log.warn("WebSocket CONNECT rejected — refresh token used");
+            if (jwtProvider.getTokenType(token) == TokenType.REFRESH) {
+                log.warn("WebSocket CONNECT rejected - refresh token used");
                 throw new IllegalArgumentException("Refresh tokens cannot be used for WebSocket");
             }
 
             UUID userId = jwtProvider.getUserIdFromToken(token);
-
-            // Set authenticated principal so Spring can route user-specific messages
             UsernamePasswordAuthenticationToken auth =
                     new UsernamePasswordAuthenticationToken(
                             userId.toString(),
@@ -55,14 +53,13 @@ public class StompAuthInterceptor implements ChannelInterceptor {
                     );
 
             accessor.setUser(auth);
-            log.debug("WebSocket CONNECT authenticated — userId={}", userId);
+            log.debug("WebSocket CONNECT authenticated - userId={}", userId);
         }
 
         return message;
     }
 
     private String extractToken(StompHeaderAccessor accessor) {
-        // Client sends: Authorization: Bearer <token> in STOMP CONNECT headers
         String auth = accessor.getFirstNativeHeader("Authorization");
         if (auth != null && auth.startsWith("Bearer ")) {
             return auth.substring(7);

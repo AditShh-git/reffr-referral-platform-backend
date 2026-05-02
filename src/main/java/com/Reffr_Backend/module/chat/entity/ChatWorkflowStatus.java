@@ -1,13 +1,17 @@
 package com.Reffr_Backend.module.chat.entity;
 
 /**
- * Referral workflow lifecycle tracked inside the Chat.
- * REQUESTED → chat peer opened (initial state)
- * ACCEPTED  → referral accepted, chat unlocked
- * REFERRED  → referrer has submitted the candidate to the company
+ * Lifecycle stages tracked inside a Chat.
+ *
+ * <pre>
+ *  ACCEPTED → referral accepted, chat unlocked (initial state for all chats)
+ *  REFERRED → referrer submitted the candidate to the company
+ *  INACTIVE → no message activity for N days (see app.chat.inactive-after-days)
+ * </pre>
  */
 public enum ChatWorkflowStatus {
-    REQUESTED,
     ACCEPTED,
-    REFERRED
+    REFERRED,
+    INACTIVE
 }
+

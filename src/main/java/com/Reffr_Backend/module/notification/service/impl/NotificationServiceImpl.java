@@ -131,6 +131,6 @@ public class NotificationServiceImpl implements NotificationService {
                 nextCursor = next.toInstant(ZoneOffset.UTC);
             }
         }
-        return new CursorPagedResponse<>(dtoList, nextCursor, notifications.hasNext());
+        return new CursorPagedResponse<>(dtoList, nextCursor, null, notifications.hasNext());
     }
 }

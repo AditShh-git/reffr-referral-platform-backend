@@ -81,4 +81,18 @@ ORDER BY c.lastMessageAt DESC NULLS LAST, c.id DESC
       AND m.read = false
     """)
     long countUnreadMessages(@Param("userId") UUID userId);
+
+    /**
+     * Chats eligible for inactivity flagging.
+     * Strictly scoped to ACCEPTED — REFERRED chats are excluded so successful
+     * referral conversations are never accidentally flagged as inactive.
+     */
+    @EntityGraph(attributePaths = {"seeker", "referrer"})
+    @Query("""
+        SELECT c FROM Chat c
+        WHERE c.workflowStatus = com.Reffr_Backend.module.chat.entity.ChatWorkflowStatus.ACCEPTED
+          AND c.active = true
+          AND c.lastActivityAt < :cutoff
+    """)
+    java.util.List<Chat> findInactiveAcceptedChats(@Param("cutoff") java.time.LocalDateTime cutoff);
 }
